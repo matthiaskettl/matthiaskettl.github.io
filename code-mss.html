@@ -1,0 +1,45 @@
+<table>
+<tbody>
+<tr>
+<td><pre style='color:#000000;background:#ffffff;'><span style='color:#000000; font-weight:bold; '>01<br>02<br>03<br>04<br>05<br>06<br>07<br>08<br>09<br>10<br>11<br>12<br>13<br>14<br>15<br>16<br>17<br>18<br>19<br>20<br>21<br>22<br>23<br>24<br>25<br>26<br>27<br>28<br>29<br>30<br>31<br>32<br>33<br>34</pre></td>
+<td>
+<pre style='color:#000000;background:#ffffff;'><span style='color:#800000; font-weight:bold; '>extern</span> <span style='color:#800000; font-weight:bold; '>int</span> __VERIFIER_nondet_int<span style='color:#808030; '>(</span><span style='color:#808030; '>)</span><span style='color:#800080; '>;</span>
+
+<span style='color:#3f5fbf; '>/** </span>
+<span style='color:#3f5fbf; '>&#xa0;&#xa0;* Calculate the maximum scoring sequence.</span>
+<span style='color:#3f5fbf; '>&#xa0;&#xa0;* The input is an array of integers.</span>
+<span style='color:#3f5fbf; '>&#xa0;&#xa0;* The output is the highest sum of consecutive elements in the array.</span>
+<span style='color:#3f5fbf; '>&#xa0;&#xa0;* Example: for array = [2, -1, 7, -5, 2] the output is 8 because 2 + (-1) + 7 = 8</span>
+<span style='color:#3f5fbf; '>&#xa0;&#xa0;* There is no other partial sequence wich sums up to a higher value.</span>
+<span style='color:#3f5fbf; '>*/</span>
+<span style='color:#800000; font-weight:bold; '>int</span> <span style='color:#400000; '>main</span><span style='color:#808030; '>(</span><span style='color:#808030; '>)</span><span style='color:#800080; '>{</span>
+
+	<span style='color:#800000; font-weight:bold; '>int</span> a<span style='color:#808030; '>[</span><span style='color:#808030; '>]</span> <span style='color:#808030; '>=</span> <span style='color:#800080; '>{</span><span style='color:#808030; '>-</span><span style='color:#008c00; '>2</span><span style='color:#808030; '>,</span> <span style='color:#008c00; '>5</span><span style='color:#808030; '>,</span> <span style='color:#808030; '>-</span><span style='color:#008c00; '>2</span><span style='color:#808030; '>,</span> <span style='color:#008c00; '>5</span><span style='color:#800080; '>}</span><span style='color:#800080; '>;</span>
+	<span style='color:#800000; font-weight:bold; '>int</span> test <span style='color:#808030; '>=</span> <span style='color:#008c00; '>0</span><span style='color:#800080; '>;</span>
+	
+	<span style='color:#696969; '>// 4 = length of array</span>
+	<span style='color:#800000; font-weight:bold; '>for</span> <span style='color:#808030; '>(</span><span style='color:#800000; font-weight:bold; '>int</span> i <span style='color:#808030; '>=</span> <span style='color:#008c00; '>1</span><span style='color:#800080; '>;</span> i <span style='color:#808030; '>&lt;</span><span style='color:#808030; '>=</span> <span style='color:#008c00; '>4</span><span style='color:#800080; '>;</span> i<span style='color:#808030; '>+</span><span style='color:#808030; '>+</span><span style='color:#808030; '>)</span> <span style='color:#800080; '>{</span>
+		<span style='color:#800000; font-weight:bold; '>for</span> <span style='color:#808030; '>(</span><span style='color:#800000; font-weight:bold; '>int</span> j <span style='color:#808030; '>=</span> i <span style='color:#808030; '>-</span> <span style='color:#008c00; '>1</span><span style='color:#800080; '>;</span> j <span style='color:#808030; '>&lt;</span> <span style='color:#008c00; '>4</span><span style='color:#800080; '>;</span> j<span style='color:#808030; '>+</span><span style='color:#808030; '>+</span><span style='color:#808030; '>)</span> <span style='color:#800080; '>{</span>
+			<span style='color:#800000; font-weight:bold; '>int</span> s <span style='color:#808030; '>=</span> <span style='color:#008c00; '>0</span><span style='color:#800080; '>;</span>
+			<span style='color:#800000; font-weight:bold; '>for</span> <span style='color:#808030; '>(</span><span style='color:#800000; font-weight:bold; '>int</span> k <span style='color:#808030; '>=</span> i<span style='color:#800080; '>;</span> k <span style='color:#808030; '>&lt;</span><span style='color:#808030; '>=</span> j<span style='color:#800080; '>;</span> k<span style='color:#808030; '>+</span><span style='color:#808030; '>+</span><span style='color:#808030; '>)</span> <span style='color:#800080; '>{</span>
+				s <span style='color:#808030; '>=</span> s <span style='color:#808030; '>+</span> a<span style='color:#808030; '>[</span>k <span style='color:#808030; '>-</span> <span style='color:#008c00; '>1</span><span style='color:#808030; '>]</span><span style='color:#800080; '>;</span>
+			<span style='color:#800080; '>}</span>
+			<span style='color:#800000; font-weight:bold; '>if</span> <span style='color:#808030; '>(</span>s <span style='color:#808030; '>></span> test<span style='color:#808030; '>)</span> <span style='color:#800080; '>{</span>
+				test <span style='color:#808030; '>=</span> s<span style='color:#800080; '>;</span>
+			<span style='color:#800080; '>}</span>
+		<span style='color:#800080; '>}</span>
+	<span style='color:#800080; '>}</span>
+
+	<span style='color:#800000; font-weight:bold; '>if</span><span style='color:#808030; '>(</span>test <span style='color:#808030; '>!</span><span style='color:#808030; '>=</span> <span style='color:#008c00; '>8</span><span style='color:#808030; '>)</span> <span style='color:#800080; '>{</span>
+		<span style='color:#008484; '>goto</span> <span style='color:#e34adc; '>ERROR</span><span style='color:#800080; '>;</span>
+	<span style='color:#800080; '>}</span>
+
+<span style='color:#e34adc; '>EXIT:</span> <span style='color:#800000; font-weight:bold; '>return</span> <span style='color:#008c00; '>0</span><span style='color:#800080; '>;</span>
+<span style='color:#e34adc; '>ERROR:</span> <span style='color:#800000; font-weight:bold; '>return</span> <span style='color:#008c00; '>1</span><span style='color:#800080; '>;</span>
+<span style='color:#800080; '>}</span>
+</pre>
+<!--Created using ToHtml.com on 2020-04-22 19:40:09 UTC -->
+</td>
+</tr>
+</tbody>
+</table>
