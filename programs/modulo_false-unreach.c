@@ -1,5 +1,6 @@
 extern int __VERIFIER_nondet_int();
 
+/** Find a number greater than seed that is divisble by 3 */
 int generateNumberDiv3(int seed){
 	int old;
 	do{

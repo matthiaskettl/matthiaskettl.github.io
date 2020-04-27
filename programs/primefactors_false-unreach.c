@@ -7,12 +7,17 @@ int isPrime(int n){
 	return 1;
 }
 
+/** 
+  Calculate all prime factors of a given number.
+  Example: prime factors of 420 are {2, 2, 3, 5, 7} because
+           2 * 2 * 3 * 5 * 7 = 420 and 2,3,5,7 are prime.
+  */
 int main(){
 
-	//Calculate prime factors of number;
+	// Calculate prime factors of number;
 	int number = __VERIFIER_nondet_int();
 	if (number <= 0) {
-		//Tell user that a positive number is required.
+		// Tell user that a positive number is required.
 		goto EXIT;
 	}
 
@@ -28,7 +33,8 @@ int main(){
 		}
 	}
 
-	// POST-CONDITION check if test equals number (test should equal the product of all found prime factors)
+	// POST-CONDITION check if test equals number 
+	// (test should equal the product of all found prime factors)
 	if(test != number) {
 		goto ERROR;	
 	}

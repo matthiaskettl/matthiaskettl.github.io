@@ -4,6 +4,7 @@ extern int __VERIFIER_nondet_int();
 #define FALSE 1
 
 int isSorted(int a[], int len){
+	// check if the array is sorted
 	for(int i = 0; i < len-1; i++) {
 		if(a[i] > a[i+1]) {
 			return FALSE;
@@ -12,16 +13,23 @@ int isSorted(int a[], int len){
 	return TRUE;
 }
 
+/** Sort any 3-dimensional array ascending */
 int main(){
-	
-	//sort any array of size 3 from smallest to biggest value
+	// sort any array of size 3 in ascending order
+	// let the user input 3 numbers that should be sorted.
 	int first = __VERIFIER_nondet_int();
 	int second = __VERIFIER_nondet_int();
 	int third = __VERIFIER_nondet_int();
 	int a[] = {first,second,third};
+
+	// length of array
 	int len = 3;
+
+	// current position.
 	int i = 0;
+
 	while(!isSorted(a,len)) {
+		// swap entries if not sorted
 		int buff = a[i];
 		a[i] = a[i+1];
 		a[i+1] = buff;
