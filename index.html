@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html>
+<body>
+
+<h1>
+Redirecting you to the survey...
+</h1>
+<p id="predicates">
+Or click here:
+</p>
+
+<script>
+	var randNum = Math.floor(Math.random() * 2);
+
+    // An array of URL's
+    var randURLs = [
+        "https://docs.google.com/forms/d/e/1FAIpQLSeNxf61OtObKeYrfDESsk_rFzqGJZuFs0QJdXjkAovWe48KDA/viewform",
+        "https://docs.google.com/forms/d/e/1FAIpQLSevNUy4J8smDDKqfnXrCCtGjWjAlirnr5Dk0xMb9ulXzmnD-g/viewform",
+    ];
+
+    window.open(randURLs[randNum], '_blank');
+	document.getElementById("predicates").innerHTML = "If your browser does not open the new tab automatically click here: <a href=" + randURLs[randNum] + ">The survey</a>"
+</script>
+
+</body>
+</html>
+
+
+
+
