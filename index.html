@@ -17,8 +17,11 @@ Or click here:
         "https://forms.gle/68t8k8BqmH1e2N21A",
         "https://forms.gle/w445MpraQsuPLxVn9",
     ];
+	
+    let newTab = window.open();
+    newTab.location.href = randURLs[randNum];
 
-    window.open(randURLs[randNum], '_blank');
+    //window.open(randURLs[randNum], '_blank');
 	document.getElementById("predicates").innerHTML = "You are member of group " + (randNum+1) + ". If your browser does not open the new tab automatically click here: <a href=" + randURLs[randNum] + ">The survey</a>"
 </script>
 
