@@ -1,10 +1,50 @@
 <!DOCTYPE html>
 <html>
-<body>
+<style>
+.content {
+  max-width: 500px;
+  margin: auto;
+  color: white;
+  text-align: center;
+  background-image: url('https://wallpaperaccess.com/full/731610.jpg');
+}
 
-<h1>
-Assigning you to your group and redirect to the corresponding survey...
+a:link {
+  color: orange;
+  background-color: transparent;
+  text-decoration: none;
+}
+
+a:visited {
+  color: pink;
+  background-color: transparent;
+  text-decoration: none;
+}
+
+a:hover {
+  color: red;
+  background-color: transparent;
+  text-decoration: underline;
+}
+
+a:active {
+  color: yellow;
+  background-color: transparent;
+  text-decoration: underline;
+}
+</style>
+<body class="content">
+
+<div>
+</div>
+<h1 id="h1">
+Assigned to group: 1.
 </h1>
+
+<h2>
+<i>Try to redirect you to the survey automatically...</i>
+</h2>
+
 <p id="predicates">
 	Or click here: <a href="https://forms.gle/68t8k8BqmH1e2N21A">Survey</a>
 </p>
@@ -18,12 +58,8 @@ Assigning you to your group and redirect to the corresponding survey...
         "https://forms.gle/w445MpraQsuPLxVn9",
     ];
     window.open(randURLs[randNum], '_blank');
-	document.getElementById("predicates").innerHTML = "You are member of group " + (randNum+1) + ". If your browser does not open the new tab automatically click here: <a href=" + randURLs[randNum] + ">The survey</a>"
+	document.getElementById("h1").innerHTML = "Assigned to group " + (randNum+1) + ".";
+	document.getElementById("predicates").innerHTML = "If your browser does not open the new tab automatically click <a href=" + randURLs[randNum] + ">here</a>.";
 </script>
-
 </body>
 </html>
-
-
-
-
