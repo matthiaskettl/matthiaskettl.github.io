@@ -16,13 +16,14 @@ int main(){
 
 	// Calculate prime factors of number;
 	int number = __VERIFIER_nondet_int();
+	int copyForCheck = number;
 	if (number <= 0) {
 		// Tell user that a positive number is required.
+		// This is not consider to be an error.
 		goto EXIT;
 	}
 
 	int test = 1;
-
 	for(int i = 2; i <= number; i++){
 		if (number % i == 0 && isPrime(i)) {
 			// Multiply all prime factors to test
@@ -35,7 +36,7 @@ int main(){
 
 	// POST-CONDITION check if test equals number 
 	// (test should equal the product of all found prime factors)
-	if(test != number) {
+	if(test != copyForCheck) {
 		goto ERROR;	
 	}
 

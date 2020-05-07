@@ -16,7 +16,8 @@ int isPrime(int check){
 /** Check if a number is a prime number */
 int main() {
 
-	int check = __VERIFIER_nondet_int() % 10; 
+	int input = __VERIFIER_nondet_int();
+	int check = input % 10; 
 	int result = isPrime(check);
 	
 	/* POST-CONDITION check if the program was able to identify all primes
