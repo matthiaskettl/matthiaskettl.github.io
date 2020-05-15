@@ -281,6 +281,30 @@ input:checked+.slider:before {
 	outline: #df80ff solid 2px;
 }
 
+#fault-values table {
+	border-collapse: collapse;
+	table-layout: fixed ;
+	width: 100%;
+}
+  
+#fault-values td {
+	width: 50%;
+	text-align: left;
+	padding: 8px;
+}
+  
+#fault-values tr:nth-child(even){background-color: #f2f2f2}
+  
+#fault-values tr:first-child {
+	background-color: #4CAF50;
+	color: white;
+}
+
+#fault-values tr:first-child td {
+	text-align: center;
+	font-weight: 600;
+}
+
 .rank {
 	text-align: center;
 }
@@ -290,28 +314,54 @@ input:checked+.slider:before {
 	border-collapse: collapse;
 }
 
-.fault-table td{
+.fault-table td {
 	cursor: pointer;
 	padding: 7px;
 	border: #000000 2px solid;
 }
 
-.fault-table tr:first-child td:first-child{
+.fault-table .fault-rank {
 	background-color: #28a745;
 	text-align: center;
 	font-weight: 700;
 	width: 10%;
 }
 
-.fault-table tr:first-child td:nth-child(2){
+.fault-table .fault-score {
 	background-color: #ffc107;
 	text-align: center;
 	width: 10%;
 }
 
-.fault-table tr:first-child td:nth-child(3){
+.fault-table .fault-details-header {
 	background-color: #ff3907aa;
 	font-weight: 700;
+}
+
+.fault-table .fault-lines {
+	max-height: 8em;
+	overflow: auto;
+	border: 1px solid gray;
+	border-radius: 3px;
+}
+
+.fault-lines {
+	padding: 3px;
+	list-style: none;
+}
+
+ul.fault-lines li {
+	display: grid;
+	grid-template-columns: minmax(2em, min-content) auto;
+	grid-column-gap: 5px;
+}
+
+.fault-lines .line-number {
+	text-align: right;
+}
+
+.fault-lines .line-number::after {
+	content: ':';
 }
 
 .horizontal-div {
@@ -1067,13 +1117,31 @@ with considerably less effort */
 		$rootScope.errorPath = [];
 
 		//Fault Localization
-		$scope.selectedLines = [];
-		$scope.redLine = -1;
+		function getLinesOfFault(fault) {
+			var lines = {};
+			for (var i = 0; i < fault["errPathIds"].length; i++) {
+				var errorPathIdx = fault["errPathIds"][i];
+				var errorPathElem = $rootScope.errorPath[errorPathIdx];
+				var line = {"line": errorPathElem["line"], "desc": errorPathElem["desc"]};
+				var line_key = line["line"] + line["desc"];
+				lines[line_key] = line;
+			}
+			return Object.values(lines);
+		};
+
+		// make faults visible to angular
 		$rootScope.faults = [];
-                const allFaults = cfaJson.faults;
-                if(allFaults !== undefined && allFaults.length > 0){
-                        $rootScope.faults = allFaults;
-                }
+		if (cfaJson.faults !== undefined) {
+			for (var i = 0; i < cfaJson.faults.length; i++) {
+				var fault = cfaJson.faults[i];
+				var fInfo = Object.assign({}, fault);
+				// store all error-path elements related to this fault.
+				// we can't do  this in the Java backend because
+				// we can't be sure to have the full error-path elements in the FaultLocalizationInfo
+				// when the faults-code is generated.
+				$rootScope.faults.push(fInfo);
+			}
+		}
 
 		function getValues(val, prevValDict) {
 			var values = {};
@@ -1093,9 +1161,9 @@ with considerably less effort */
 		};
 
 		// initialize array that stores the important edges. Index counts only, when edges appear in the report.
-                var importantEdges = [];
+		var importantEdges = [];
 		var importantIndex = -1;
-		const faultEdges = [];
+		var faultEdges = [];
 		if (errorPath !== undefined) {
 			var indentationlevel = 0;
 			for (var i = 0; i < errorPath.length; i++) {
@@ -1132,8 +1200,8 @@ with considerably less effort */
 
 				if (errPathElem.faults !== undefined && errPathElem.faults.length > 0) {
 					errPathElem["importantindex"] = importantIndex;
-					errPathElem["bestrank"] = allFaults[errPathElem.faults[0]].rank;
-					errPathElem["bestreason"] = allFaults[errPathElem.faults[0]].reason;
+					errPathElem["bestrank"] = $rootScope.faults[errPathElem.faults[0]].rank;
+					errPathElem["bestreason"] = $rootScope.faults[errPathElem.faults[0]].reason;
 					if (errPathElem["additional"] !== undefined && errPathElem["additional"] !== "") {
 						errPathElem["bestreason"] = errPathElem["bestreason"] + errPathElem["additional"];
 					}
@@ -1147,7 +1215,7 @@ with considerably less effort */
 			};
 
 			function addFaultLocalizationInfo(){
-				if (allFaults !== undefined && allFaults.length !== 0) {
+				if (faultEdges !== undefined && faultEdges.length > 0) {
 					for (var j = 0; j < faultEdges.length; j++) {
 						d3.selectAll("#errpath-" + faultEdges[j].importantindex + " td pre").classed("fault", true);
 					}
@@ -1170,14 +1238,43 @@ with considerably less effort */
 
 		}
 
-		$scope.hideFaults = (allFaults == undefined || allFaults.length == 0);
+		for (var i = 0; i < $rootScope.faults.length; i++) {
+                        var fInfo = $rootScope.faults[i];
+                        fInfo["errPathIds"] = [];
+                        for (var j = 0; j < $rootScope.errorPath.length; j++) {
+                                var element = $rootScope.errorPath[j];
+                                if (element.faults.includes(i)) {
+										fInfo["errPathIds"].push(j);
+										var valDict = {};
+										var allValues = $rootScope.errorPath[j].valDict;
+										for (variable in allValues) {
+											if (fInfo.reason.search("::"+variable) != -1) {
+												var markedVariable = '<p style="color:red">' + variable + '</p>';
+												var markedValue = '<p style="color:red">' + allValues[variable] + '</p>';
+												valDict[markedVariable] = markedValue;
+											} else {
+												valDict[variable] = allValues[variable];
+											}
+										}
+										fInfo["valDict"] = valDict;
+                                }
+				fInfo["lines"] = getLinesOfFault(fInfo);
+                        }
+		}
+
+		$scope.hideFaults = ($rootScope.faults == undefined || $rootScope.faults.length == 0);
 
 		$scope.faultClicked = function(){
-			var toggle = !$scope.hideErrorTable;
-			if (toggle) {
-				$("#report-controller").scope().setTab(3);
-			}
-			$scope.hideErrorTable = toggle;
+			$scope.hideErrorTable = !$scope.hideErrorTable;
+		};
+
+		$scope.clickedFaultLocElement = function ($event) {
+			d3.selectAll(".clickedFaultLocElement").classed("clickedFaultLocElement", false);
+			var clickedElement = d3.select($event.currentTarget);
+			clickedElement.classed("clickedFaultLocElement", true);
+			var faultElementIdx = clickedElement.attr("id").substring("fault-".length);
+			var faultElement = $rootScope.faults[faultElementIdx];
+			markErrorPathElementInTab(faultElement.errPathIds);
 		};
 
 		$scope.errPathPrevClicked = function ($event) {
@@ -1187,7 +1284,7 @@ with considerably less effort */
 				selection.classed("clickedErrPathElement", false);
 				d3.select("#errpath-" + prevId).classed("clickedErrPathElement", true);
 				$("#value-assignment").scrollTop($("#value-assignment").scrollTop() - 18);
-				markErrorPathElementInTab("Prev", prevId);
+				markErrorPathElementInTab(prevId);
 			}
 		};
 
@@ -1195,7 +1292,7 @@ with considerably less effort */
 			d3.select("tr.clickedErrPathElement").classed("clickedErrPathElement", false);
 			d3.select("#errpath-0").classed("clickedErrPathElement", true);
 			$("#value-assignment").scrollTop(0);
-			markErrorPathElementInTab("Start", 0);
+			markErrorPathElementInTab(0);
 		};
 
 		$scope.errPathNextClicked = function ($event) {
@@ -1205,7 +1302,7 @@ with considerably less effort */
 				selection.classed("clickedErrPathElement", false);
 				d3.select("#errpath-" + nextId).classed("clickedErrPathElement", true);
 				$("#value-assignment").scrollTop($("#value-assignment").scrollTop() + 18);
-				markErrorPathElementInTab("Next", nextId);
+				markErrorPathElementInTab(nextId);
 			}
 		};
 
@@ -1213,77 +1310,43 @@ with considerably less effort */
 			d3.select("tr.clickedErrPathElement").classed("clickedErrPathElement", false);
 			var clickedElement = d3.select($event.currentTarget.parentNode);
 			clickedElement.classed("clickedErrPathElement", true);
-			markErrorPathElementInTab("", clickedElement.attr("id").substring("errpath-".length));
+			markErrorPathElementInTab(clickedElement.attr("id").substring("errpath-".length));
 		};
 
-		function markErrorPathElementInTab(buttonId, selectedErrPathElemId) {
-			if ($rootScope.errorPath[selectedErrPathElemId] === undefined) {
-				return;
-			}
+		function markErrorPathElementInTab(selectedErrPathElemId) {
 			var currentTab = $("#report-controller").scope().getTabSet();
-			// when the current tab is not one of CFA, ARG, source, set the tab to ARG
-			if (buttonId === "") {
-				handleErrorPathElemClick(currentTab, selectedErrPathElemId);
-			} else if (buttonId === "Start") {
-				handleStartButtonClick(currentTab);
-			} else if (buttonId === "Prev") {
-				handlePrevButtonClick(currentTab, selectedErrPathElemId);
-			} else { // "Next"
-				handleNextButtonClick(currentTab, selectedErrPathElemId);
+			if (!Array.isArray(selectedErrPathElemId)) {
+				selectedErrPathElemId = [selectedErrPathElemId];
+			}
+			unmarkEverything();
+			for (var i = 0; i < selectedErrPathElemId.length; i++) {
+				var id = selectedErrPathElemId[i];
+				if ($rootScope.errorPath[id] === undefined) {
+					return;
+				}
+				handleErrorPathElemClick(currentTab, id);
 			}
 		}
 
 		function handleErrorPathElemClick(currentTab, errPathElemIndex) {
-			if (currentTab === 1) {
-				markCfaEdge($rootScope.errorPath[errPathElemIndex]);
-			} else if (currentTab === 2) {
-				markArgNode($rootScope.errorPath[errPathElemIndex]);
-			} else if (currentTab === 3) {
-				markSourceLine($rootScope.errorPath[errPathElemIndex]);
-			} else {
+			markCfaEdge($rootScope.errorPath[errPathElemIndex]);
+			markArgNode($rootScope.errorPath[errPathElemIndex]);
+			markSourceLine($rootScope.errorPath[errPathElemIndex]);
+			if (![1, 2, 3].includes(currentTab)) {
 				$("#report-controller").scope().setTab(2);
-				markArgNode($rootScope.errorPath[errPathElemIndex]);
 			}
 		}
 
-		function handleStartButtonClick(currentTab) {
-			if (currentTab === 1) {
-				markCfaEdge($rootScope.errorPath[0]);
-			} else if (currentTab === 2) {
-				markArgNode($rootScope.errorPath[0]);
-			} else if (currentTab === 3) {
-				markSourceLine($rootScope.errorPath[0]);
-			} else {
-				$("#report-controller").scope().setTab(2);
-				markArgNode($rootScope.errorPath[0]);
-			}
+		function unmarkEverything() {
+			[
+				"marked-cfa-edge",
+				"marked-cfa-node",
+				"marked-cfa-node-label",
+				"marked-arg-node",
+				"marked-source-line",
+			].forEach(function (c) { d3.selectAll("." + c).classed(c, false) });
 		}
 
-		function handlePrevButtonClick(currentTab, elementId) {
-			if (currentTab === 1) {
-				markCfaEdge($rootScope.errorPath[elementId]);
-			} else if (currentTab === 2) {
-				markArgNode($rootScope.errorPath[elementId]);
-			} else if (currentTab === 3) {
-				markSourceLine($rootScope.errorPath[elementId]);
-			} else {
-				$("#report-controller").scope().setTab(2);
-				markArgNode($rootScope.errorPath[elementId]);
-			}
-		}
-
-		function handleNextButtonClick(currentTab, elementId) {
-			if (currentTab === 1) {
-				markCfaEdge($rootScope.errorPath[elementId]);
-			} else if (currentTab === 2) {
-				markArgNode($rootScope.errorPath[elementId]);
-			} else if (currentTab === 3) {
-				markSourceLine($rootScope.errorPath[elementId]);
-			} else {
-				$("#report-controller").scope().setTab(2);
-				markArgNode($rootScope.errorPath[elementId]);
-			}
-		}
 
 		function markCfaEdge(errPathEntry) {
 			var actualSourceAndTarget = getActualSourceAndTarget(errPathEntry);
@@ -1294,7 +1357,6 @@ with considerably less effort */
 				var boundingRect = selection.node().getBoundingClientRect();
 				$("#cfa-container").scrollTop(boundingRect.top + $("#cfa-container").scrollTop() - 300).scrollLeft(boundingRect.left - d3.select("#cfa-container").style("width").split("px")[0] - $("#cfa-container"));
 				if (actualSourceAndTarget.source in cfaJson.combinedNodes) {
-					d3.selectAll(".marked-cfa-node-label").classed("marked-cfa-node-label", false);
 					selection.selectAll("tspan").each(function (d, i) {
 						if (d3.select(this).html().includes(errPathEntry.source)) {
 							d3.select(this).classed("marked-cfa-node-label", true);
@@ -1303,11 +1365,6 @@ with considerably less effort */
 				}
 				return;
 			}
-			if (!d3.select(".marked-cfa-edge").empty()) {
-				d3.select(".marked-cfa-edge").classed("marked-cfa-edge", false);
-			}
-			d3.selectAll(".marked-cfa-node").classed("marked-cfa-node", false);
-			d3.selectAll(".marked-cfa-node-label").classed("marked-cfa-node-label", false);
 			var selection = d3.select("#cfa-edge_" + actualSourceAndTarget.source + "-" + actualSourceAndTarget.target);
 			selection.classed("marked-cfa-edge", true);
 			var boundingRect = selection.node().getBoundingClientRect();
@@ -1361,9 +1418,6 @@ with considerably less effort */
 			if (errPathEntry.argelem === undefined) {
 				return;
 			}
-			if (!d3.select(".marked-arg-node").empty()) {
-				d3.select(".marked-arg-node").classed("marked-arg-node", false);
-			}
 			var idToSelect;
 			if (d3.select("#arg-graph0").style("display") !== "none")
 				idToSelect = "#arg-node";
@@ -1376,9 +1430,6 @@ with considerably less effort */
 		}
 
 		function markSourceLine(errPathEntry) {
-			if (!d3.select(".marked-source-line").empty()) {
-				d3.select(".marked-source-line").classed("marked-source-line", false);
-			}
 			if (errPathEntry.line === 0) {
 				errPathEntry.line = 1;
 			}
@@ -1482,21 +1533,7 @@ with considerably less effort */
 				element.classList.add("markedTableElement");
 			}
 		};
-		$scope.showLines = function (lines){
-			$("#source-"+$scope.redLine).removeClass("highlight-selected-line");
-			for(var i = 0; i < $scope.selectedLines.length; i++){
-				$("#source-"+$scope.selectedLines[i]).removeClass("highlight-line");
-			}
-			for(var i = 0; i < lines.length; i++){
-				$("#source-"+lines[i]).addClass("highlight-line");
-			}
-			$scope.selectedLines = lines;
-		};
-		$scope.showRedLine = function (index, edge){
-			$("#source-"+$scope.redLine).removeClass("highlight-selected-line");
-			$scope.redLine = edge.lines[index];
-			$("#source-"+$scope.redLine).addClass("highlight-selected-line");
-		};
+
 		$scope.htmlTrusted = function(html) {
 			return $sce.trustAsHtml(html);
 		};
@@ -1784,8 +1821,8 @@ var cfaJson = {
 "combinedNodes":{"33":[34,2,3,4,5],"21":[18],"25":[28],"30":[31],"14":[7],"15":[16]},
 "combinedNodesLabels":{"33":"33 int main();\n34 Function start dummy edge\n2 int a[4] = { -2, 5, -2, 5 };\n3 int test = 0;\n4 for\n5 int i = 1;","21":"21 \n18 k = k + 1;","25":"25 Label: EXIT\n28 return 0;","30":"30 Label: ERROR\n31 return 1;","14":"14 \n7 i = i + 1;","15":"15 for\n16 int k = i;"},
 "mergedNodes":[34,2,3,4,5,28,31,7,16,18],
-"errorPath":[{"val":"","file":"<none>","importance":0,"line":0,"additional":"","argelem":0,"source":1,"faults":[],"target":33,"desc":"INIT GLOBAL VARS"},{"val":"","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":0,"line":8,"additional":"","argelem":13,"source":33,"faults":[],"target":34,"desc":"int main();"},{"val":"","file":"<none>","importance":0,"line":0,"additional":"","source":34,"faults":[],"target":2,"desc":"Function start dummy edge"},{"val":"(&a) == 4LL;\n(a[0]) == -2;\n(a[1]) == 5;\n(a[2]) == -2;\n(a[3]) == 5;\n","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":0,"line":11,"additional":"","source":2,"faults":[],"target":3,"desc":"int a[4] = { -2, 5, -2, 5 };"},{"val":"test == 0;\n","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":13,"additional":"","source":3,"faults":[],"target":4,"desc":"int test = 0;"},{"val":"(&a) == 4LL;\n(a[1]) == 5;\n(a[0]) == -2;\ntest == 0;\n(a[2]) == -2;\n(a[3]) == 5;\n","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":0,"line":17,"additional":"","source":4,"faults":[],"target":5,"desc":"for"},{"val":"i == 1;\n","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":17,"additional":"","argelem":14,"source":5,"faults":[],"target":6,"desc":"int i = 1;"},{"val":"i == 1;\ni == 1;","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":17,"additional":"","argelem":2702,"source":6,"faults":[],"target":8,"desc":"[i <= 4]"},{"val":"","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":0,"line":18,"additional":"","argelem":2703,"source":8,"faults":[],"target":10,"desc":"for"},{"val":"j == 0;\n","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":18,"additional":"","argelem":2710,"source":10,"faults":[],"target":11,"desc":"int j = i - 1;"},{"val":"j == 0;\nj == 0;","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":18,"additional":"","argelem":2712,"source":11,"faults":[],"target":13,"desc":"[j < 4]"},{"val":"s == 0;\n","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":19,"additional":"","argelem":2713,"source":13,"faults":[],"target":15,"desc":"int s = 0;"},{"val":"s == 0;\n","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":0,"line":21,"additional":"","source":15,"faults":[],"target":16,"desc":"for"},{"val":"k == 1;\n","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":21,"additional":"","argelem":2717,"source":16,"faults":[],"target":17,"desc":"int k = i;"},{"val":"k == 1;\nj == 0;\nk == 1;\nj == 0;","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":21,"additional":"","argelem":2719,"source":17,"faults":[],"target":20,"desc":"[!(k <= j)]"},{"val":"s == 0;\ntest == 0;\ns == 0;\ntest == 0;","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":25,"additional":"","argelem":2721,"source":20,"faults":[],"target":22,"desc":"[!(s > test)]"},{"val":"","file":"<none>","importance":0,"line":0,"additional":"","argelem":2726,"source":22,"faults":[],"target":12,"desc":""},{"val":"j == 1;\n","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":18,"additional":"","argelem":2727,"source":12,"faults":[],"target":11,"desc":"j = j + 1;"},{"val":"j == 1;\nj == 1;","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":18,"additional":"","argelem":2729,"source":11,"faults":[],"target":13,"desc":"[j < 4]"},{"val":"s == 0;\n","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":19,"additional":"","argelem":2730,"source":13,"faults":[],"target":15,"desc":"int s = 0;"},{"val":"s == 0;\n","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":0,"line":21,"additional":"","source":15,"faults":[],"target":16,"desc":"for"},{"val":"k == 1;\n","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":21,"additional":"","argelem":2734,"source":16,"faults":[],"target":17,"desc":"int k = i;"},{"val":"k == 1;\nj == 1;\nk == 1;\nj == 1;","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":21,"additional":"","argelem":2736,"source":17,"faults":[1],"target":19,"desc":"[k <= j]"},{"val":"s == -2;\n","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":22,"additional":"","argelem":2737,"source":19,"faults":[2],"target":21,"desc":"s = s + (a[k - 1]);"},{"val":"s == -2;\n","file":"<none>","importance":0,"line":0,"additional":"","source":21,"faults":[],"target":18,"desc":""},{"val":"k == 2;\n","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":21,"additional":"","argelem":2747,"source":18,"faults":[3],"target":17,"desc":"k = k + 1;"},{"val":"k == 2;\nj == 1;\nk == 2;\nj == 1;","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":21,"additional":"","argelem":2750,"source":17,"faults":[],"target":20,"desc":"[!(k <= j)]"},{"val":"s == -2;\ntest == 0;\ns == -2;\ntest == 0;","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":25,"additional":"","argelem":2752,"source":20,"faults":[],"target":22,"desc":"[!(s > test)]"},{"val":"","file":"<none>","importance":0,"line":0,"additional":"","argelem":2757,"source":22,"faults":[],"target":12,"desc":""},{"val":"j == 2;\n","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":18,"additional":"","argelem":2758,"source":12,"faults":[],"target":11,"desc":"j = j + 1;"},{"val":"j == 2;\nj == 2;","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":18,"additional":"","argelem":2760,"source":11,"faults":[],"target":13,"desc":"[j < 4]"},{"val":"s == 0;\n","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":19,"additional":"","argelem":2761,"source":13,"faults":[],"target":15,"desc":"int s = 0;"},{"val":"s == 0;\n","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":0,"line":21,"additional":"","source":15,"faults":[],"target":16,"desc":"for"},{"val":"k == 1;\n","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":21,"additional":"","argelem":2765,"source":16,"faults":[],"target":17,"desc":"int k = i;"},{"val":"k == 1;\nj == 2;\nk == 1;\nj == 2;","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":21,"additional":"","argelem":2767,"source":17,"faults":[1],"target":19,"desc":"[k <= j]"},{"val":"s == -2;\n","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":22,"additional":"","argelem":2768,"source":19,"faults":[2],"target":21,"desc":"s = s + (a[k - 1]);"},{"val":"s == -2;\n","file":"<none>","importance":0,"line":0,"additional":"","source":21,"faults":[],"target":18,"desc":""},{"val":"k == 2;\n","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":21,"additional":"","argelem":2778,"source":18,"faults":[3],"target":17,"desc":"k = k + 1;"},{"val":"k == 2;\nj == 2;\nk == 2;\nj == 2;","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":21,"additional":"","argelem":2781,"source":17,"faults":[1],"target":19,"desc":"[k <= j]"},{"val":"s == 3;\n","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":22,"additional":"","argelem":2782,"source":19,"faults":[2],"target":21,"desc":"s = s + (a[k - 1]);"},{"val":"s == 3;\n","file":"<none>","importance":0,"line":0,"additional":"","source":21,"faults":[],"target":18,"desc":""},{"val":"k == 3;\n","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":21,"additional":"","argelem":2791,"source":18,"faults":[3],"target":17,"desc":"k = k + 1;"},{"val":"k == 3;\nj == 2;\nk == 3;\nj == 2;","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":21,"additional":"","argelem":2793,"source":17,"faults":[],"target":20,"desc":"[!(k <= j)]"},{"val":"s == 3;\ntest == 0;\ns == 3;\ntest == 0;","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":25,"additional":"","argelem":2795,"source":20,"faults":[],"target":23,"desc":"[s > test]"},{"val":"test == 3;\n","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":26,"additional":"","argelem":2796,"source":23,"faults":[0],"target":24,"desc":"test = s;"},{"val":"","file":"<none>","importance":0,"line":0,"additional":"","argelem":2798,"source":24,"faults":[],"target":22,"desc":""},{"val":"","file":"<none>","importance":0,"line":0,"additional":"","argelem":2800,"source":22,"faults":[],"target":12,"desc":""},{"val":"j == 3;\n","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":18,"additional":"","argelem":2801,"source":12,"faults":[],"target":11,"desc":"j = j + 1;"},{"val":"j == 3;\nj == 3;","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":18,"additional":"","argelem":2803,"source":11,"faults":[],"target":13,"desc":"[j < 4]"},{"val":"s == 0;\n","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":19,"additional":"","argelem":2804,"source":13,"faults":[],"target":15,"desc":"int s = 0;"},{"val":"s == 0;\n","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":0,"line":21,"additional":"","source":15,"faults":[],"target":16,"desc":"for"},{"val":"k == 1;\n","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":21,"additional":"","argelem":2808,"source":16,"faults":[],"target":17,"desc":"int k = i;"},{"val":"k == 1;\nj == 3;\nk == 1;\nj == 3;","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":21,"additional":"","argelem":2810,"source":17,"faults":[1],"target":19,"desc":"[k <= j]"},{"val":"s == -2;\n","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":22,"additional":"","argelem":2811,"source":19,"faults":[2],"target":21,"desc":"s = s + (a[k - 1]);"},{"val":"s == -2;\n","file":"<none>","importance":0,"line":0,"additional":"","source":21,"faults":[],"target":18,"desc":""},{"val":"k == 2;\n","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":21,"additional":"","argelem":2821,"source":18,"faults":[3],"target":17,"desc":"k = k + 1;"},{"val":"k == 2;\nj == 3;\nk == 2;\nj == 3;","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":21,"additional":"","argelem":2824,"source":17,"faults":[1],"target":19,"desc":"[k <= j]"},{"val":"s == 3;\n","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":22,"additional":"","argelem":2825,"source":19,"faults":[2],"target":21,"desc":"s = s + (a[k - 1]);"},{"val":"s == 3;\n","file":"<none>","importance":0,"line":0,"additional":"","source":21,"faults":[],"target":18,"desc":""},{"val":"k == 3;\n","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":21,"additional":"","argelem":2834,"source":18,"faults":[3],"target":17,"desc":"k = k + 1;"},{"val":"k == 3;\nj == 3;\nk == 3;\nj == 3;","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":21,"additional":"","argelem":2836,"source":17,"faults":[1],"target":19,"desc":"[k <= j]"},{"val":"s == 1;\n","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":22,"additional":"","argelem":2837,"source":19,"faults":[2],"target":21,"desc":"s = s + (a[k - 1]);"},{"val":"s == 1;\n","file":"<none>","importance":0,"line":0,"additional":"","source":21,"faults":[],"target":18,"desc":""},{"val":"k == 4;\n","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":21,"additional":"","argelem":2846,"source":18,"faults":[3],"target":17,"desc":"k = k + 1;"},{"val":"k == 4;\nj == 3;\nk == 4;\nj == 3;","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":21,"additional":"","argelem":2848,"source":17,"faults":[],"target":20,"desc":"[!(k <= j)]"},{"val":"s == 1;\ntest == 3;\ns == 1;\ntest == 3;","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":25,"additional":"","argelem":2850,"source":20,"faults":[],"target":22,"desc":"[!(s > test)]"},{"val":"","file":"<none>","importance":0,"line":0,"additional":"","argelem":2855,"source":22,"faults":[],"target":12,"desc":""},{"val":"j == 4;\n","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":18,"additional":"","argelem":2856,"source":12,"faults":[],"target":11,"desc":"j = j + 1;"},{"val":"j == 4;\nj == 4;","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":18,"additional":"","argelem":2858,"source":11,"faults":[],"target":14,"desc":"[!(j < 4)]"},{"val":"","file":"<none>","importance":0,"line":0,"additional":"","argelem":2860,"source":14,"faults":[],"target":7,"desc":""},{"val":"i == 2;\n","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":17,"additional":"","argelem":2861,"source":7,"faults":[4],"target":6,"desc":"i = i + 1;"},{"val":"i == 2;\ni == 2;","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":17,"additional":"","argelem":2863,"source":6,"faults":[],"target":8,"desc":"[i <= 4]"},{"val":"","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":0,"line":18,"additional":"","argelem":2864,"source":8,"faults":[],"target":10,"desc":"for"},{"val":"j == 1;\n","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":18,"additional":"","argelem":2871,"source":10,"faults":[],"target":11,"desc":"int j = i - 1;"},{"val":"j == 1;\nj == 1;","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":18,"additional":"","argelem":2873,"source":11,"faults":[],"target":13,"desc":"[j < 4]"},{"val":"s == 0;\n","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":19,"additional":"","argelem":2874,"source":13,"faults":[],"target":15,"desc":"int s = 0;"},{"val":"s == 0;\n","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":0,"line":21,"additional":"","source":15,"faults":[],"target":16,"desc":"for"},{"val":"k == 2;\n","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":21,"additional":"","argelem":2879,"source":16,"faults":[],"target":17,"desc":"int k = i;"},{"val":"k == 2;\nj == 1;\nk == 2;\nj == 1;","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":21,"additional":"","argelem":2883,"source":17,"faults":[],"target":20,"desc":"[!(k <= j)]"},{"val":"s == 0;\ntest == 3;\ns == 0;\ntest == 3;","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":25,"additional":"","argelem":2887,"source":20,"faults":[],"target":22,"desc":"[!(s > test)]"},{"val":"","file":"<none>","importance":0,"line":0,"additional":"","argelem":2897,"source":22,"faults":[],"target":12,"desc":""},{"val":"j == 2;\n","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":18,"additional":"","argelem":2899,"source":12,"faults":[],"target":11,"desc":"j = j + 1;"},{"val":"j == 2;\nj == 2;","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":18,"additional":"","argelem":2919,"source":11,"faults":[],"target":13,"desc":"[j < 4]"},{"val":"s == 0;\n","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":19,"additional":"","argelem":2920,"source":13,"faults":[],"target":15,"desc":"int s = 0;"},{"val":"s == 0;\n","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":0,"line":21,"additional":"","source":15,"faults":[],"target":16,"desc":"for"},{"val":"k == 2;\n","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":21,"additional":"","argelem":2924,"source":16,"faults":[],"target":17,"desc":"int k = i;"},{"val":"k == 2;\nj == 2;\nk == 2;\nj == 2;","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":21,"additional":"","argelem":2926,"source":17,"faults":[1],"target":19,"desc":"[k <= j]"},{"val":"s == 5;\n","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":22,"additional":"","argelem":2927,"source":19,"faults":[2],"target":21,"desc":"s = s + (a[k - 1]);"},{"val":"s == 5;\n","file":"<none>","importance":0,"line":0,"additional":"","source":21,"faults":[],"target":18,"desc":""},{"val":"k == 3;\n","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":21,"additional":"","argelem":2960,"source":18,"faults":[3],"target":17,"desc":"k = k + 1;"},{"val":"k == 3;\nj == 2;\nk == 3;\nj == 2;","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":21,"additional":"","argelem":2992,"source":17,"faults":[],"target":20,"desc":"[!(k <= j)]"},{"val":"s == 5;\ntest == 3;\ns == 5;\ntest == 3;","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":25,"additional":"","argelem":2994,"source":20,"faults":[],"target":23,"desc":"[s > test]"},{"val":"test == 5;\n","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":26,"additional":"","argelem":2995,"source":23,"faults":[0],"target":24,"desc":"test = s;"},{"val":"","file":"<none>","importance":0,"line":0,"additional":"","argelem":2997,"source":24,"faults":[],"target":22,"desc":""},{"val":"","file":"<none>","importance":0,"line":0,"additional":"","argelem":2999,"source":22,"faults":[],"target":12,"desc":""},{"val":"j == 3;\n","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":18,"additional":"","argelem":3000,"source":12,"faults":[],"target":11,"desc":"j = j + 1;"},{"val":"j == 3;\nj == 3;","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":18,"additional":"","argelem":3002,"source":11,"faults":[],"target":13,"desc":"[j < 4]"},{"val":"s == 0;\n","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":19,"additional":"","argelem":3003,"source":13,"faults":[],"target":15,"desc":"int s = 0;"},{"val":"s == 0;\n","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":0,"line":21,"additional":"","source":15,"faults":[],"target":16,"desc":"for"},{"val":"k == 2;\n","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":21,"additional":"","argelem":3007,"source":16,"faults":[],"target":17,"desc":"int k = i;"},{"val":"k == 2;\nj == 3;\nk == 2;\nj == 3;","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":21,"additional":"","argelem":3009,"source":17,"faults":[1],"target":19,"desc":"[k <= j]"},{"val":"s == 5;\n","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":22,"additional":"","argelem":3010,"source":19,"faults":[2],"target":21,"desc":"s = s + (a[k - 1]);"},{"val":"s == 5;\n","file":"<none>","importance":0,"line":0,"additional":"","source":21,"faults":[],"target":18,"desc":""},{"val":"k == 3;\n","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":21,"additional":"","argelem":3020,"source":18,"faults":[3],"target":17,"desc":"k = k + 1;"},{"val":"k == 3;\nj == 3;\nk == 3;\nj == 3;","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":21,"additional":"","argelem":3081,"source":17,"faults":[1],"target":19,"desc":"[k <= j]"},{"val":"s == 3;\n","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":22,"additional":"","argelem":3082,"source":19,"faults":[2],"target":21,"desc":"s = s + (a[k - 1]);"},{"val":"s == 3;\n","file":"<none>","importance":0,"line":0,"additional":"","source":21,"faults":[],"target":18,"desc":""},{"val":"k == 4;\n","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":21,"additional":"","argelem":3091,"source":18,"faults":[3],"target":17,"desc":"k = k + 1;"},{"val":"k == 4;\nj == 3;\nk == 4;\nj == 3;","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":21,"additional":"","argelem":3134,"source":17,"faults":[],"target":20,"desc":"[!(k <= j)]"},{"val":"s == 3;\ntest == 5;\ns == 3;\ntest == 5;","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":25,"additional":"","argelem":3136,"source":20,"faults":[],"target":22,"desc":"[!(s > test)]"},{"val":"","file":"<none>","importance":0,"line":0,"additional":"","argelem":3141,"source":22,"faults":[],"target":12,"desc":""},{"val":"j == 4;\n","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":18,"additional":"","argelem":3142,"source":12,"faults":[],"target":11,"desc":"j = j + 1;"},{"val":"j == 4;\nj == 4;","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":18,"additional":"","argelem":3144,"source":11,"faults":[],"target":14,"desc":"[!(j < 4)]"},{"val":"","file":"<none>","importance":0,"line":0,"additional":"","argelem":3146,"source":14,"faults":[],"target":7,"desc":""},{"val":"i == 3;\n","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":17,"additional":"","argelem":3147,"source":7,"faults":[4],"target":6,"desc":"i = i + 1;"},{"val":"i == 3;\ni == 3;","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":17,"additional":"","argelem":3149,"source":6,"faults":[],"target":8,"desc":"[i <= 4]"},{"val":"","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":0,"line":18,"additional":"","argelem":3150,"source":8,"faults":[],"target":10,"desc":"for"},{"val":"j == 2;\n","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":18,"additional":"","argelem":3157,"source":10,"faults":[],"target":11,"desc":"int j = i - 1;"},{"val":"j == 2;\nj == 2;","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":18,"additional":"","argelem":3159,"source":11,"faults":[],"target":13,"desc":"[j < 4]"},{"val":"s == 0;\n","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":19,"additional":"","argelem":3160,"source":13,"faults":[],"target":15,"desc":"int s = 0;"},{"val":"s == 0;\n","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":0,"line":21,"additional":"","source":15,"faults":[],"target":16,"desc":"for"},{"val":"k == 3;\n","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":21,"additional":"","argelem":3165,"source":16,"faults":[],"target":17,"desc":"int k = i;"},{"val":"k == 3;\nj == 2;\nk == 3;\nj == 2;","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":21,"additional":"","argelem":3169,"source":17,"faults":[],"target":20,"desc":"[!(k <= j)]"},{"val":"s == 0;\ntest == 5;\ns == 0;\ntest == 5;","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":25,"additional":"","argelem":3173,"source":20,"faults":[],"target":22,"desc":"[!(s > test)]"},{"val":"","file":"<none>","importance":0,"line":0,"additional":"","argelem":3183,"source":22,"faults":[],"target":12,"desc":""},{"val":"j == 3;\n","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":18,"additional":"","argelem":3185,"source":12,"faults":[],"target":11,"desc":"j = j + 1;"},{"val":"j == 3;\nj == 3;","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":18,"additional":"","argelem":3205,"source":11,"faults":[],"target":13,"desc":"[j < 4]"},{"val":"s == 0;\n","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":19,"additional":"","argelem":3206,"source":13,"faults":[],"target":15,"desc":"int s = 0;"},{"val":"s == 0;\n","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":0,"line":21,"additional":"","source":15,"faults":[],"target":16,"desc":"for"},{"val":"k == 3;\n","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":21,"additional":"","argelem":3210,"source":16,"faults":[],"target":17,"desc":"int k = i;"},{"val":"k == 3;\nj == 3;\nk == 3;\nj == 3;","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":21,"additional":"","argelem":3212,"source":17,"faults":[1],"target":19,"desc":"[k <= j]"},{"val":"s == -2;\n","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":22,"additional":"","argelem":3213,"source":19,"faults":[2],"target":21,"desc":"s = s + (a[k - 1]);"},{"val":"s == -2;\n","file":"<none>","importance":0,"line":0,"additional":"","source":21,"faults":[],"target":18,"desc":""},{"val":"k == 4;\n","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":21,"additional":"","argelem":3264,"source":18,"faults":[3],"target":17,"desc":"k = k + 1;"},{"val":"k == 4;\nj == 3;\nk == 4;\nj == 3;","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":21,"additional":"","argelem":3344,"source":17,"faults":[],"target":20,"desc":"[!(k <= j)]"},{"val":"s == -2;\ntest == 5;\ns == -2;\ntest == 5;","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":25,"additional":"","argelem":3346,"source":20,"faults":[],"target":22,"desc":"[!(s > test)]"},{"val":"","file":"<none>","importance":0,"line":0,"additional":"","argelem":3351,"source":22,"faults":[],"target":12,"desc":""},{"val":"j == 4;\n","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":18,"additional":"","argelem":3352,"source":12,"faults":[],"target":11,"desc":"j = j + 1;"},{"val":"j == 4;\nj == 4;","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":18,"additional":"","argelem":3354,"source":11,"faults":[],"target":14,"desc":"[!(j < 4)]"},{"val":"","file":"<none>","importance":0,"line":0,"additional":"","argelem":3356,"source":14,"faults":[],"target":7,"desc":""},{"val":"i == 4;\n","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":17,"additional":"","argelem":3357,"source":7,"faults":[4],"target":6,"desc":"i = i + 1;"},{"val":"i == 4;\ni == 4;","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":17,"additional":"","argelem":3359,"source":6,"faults":[],"target":8,"desc":"[i <= 4]"},{"val":"","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":0,"line":18,"additional":"","argelem":3360,"source":8,"faults":[],"target":10,"desc":"for"},{"val":"j == 3;\n","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":18,"additional":"","argelem":3367,"source":10,"faults":[],"target":11,"desc":"int j = i - 1;"},{"val":"j == 3;\nj == 3;","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":18,"additional":"","argelem":3369,"source":11,"faults":[],"target":13,"desc":"[j < 4]"},{"val":"s == 0;\n","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":19,"additional":"","argelem":3370,"source":13,"faults":[],"target":15,"desc":"int s = 0;"},{"val":"s == 0;\n","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":0,"line":21,"additional":"","source":15,"faults":[],"target":16,"desc":"for"},{"val":"k == 4;\n","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":21,"additional":"","argelem":3375,"source":16,"faults":[],"target":17,"desc":"int k = i;"},{"val":"k == 4;\nj == 3;\nk == 4;\nj == 3;","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":21,"additional":"","argelem":3379,"source":17,"faults":[],"target":20,"desc":"[!(k <= j)]"},{"val":"s == 0;\ntest == 5;\ns == 0;\ntest == 5;","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":25,"additional":"","argelem":3383,"source":20,"faults":[],"target":22,"desc":"[!(s > test)]"},{"val":"","file":"<none>","importance":0,"line":0,"additional":"","argelem":3393,"source":22,"faults":[],"target":12,"desc":""},{"val":"j == 4;\n","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":18,"additional":"","argelem":3395,"source":12,"faults":[],"target":11,"desc":"j = j + 1;"},{"val":"j == 4;\nj == 4;","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":18,"additional":"","argelem":3415,"source":11,"faults":[],"target":14,"desc":"[!(j < 4)]"},{"val":"","file":"<none>","importance":0,"line":0,"additional":"","argelem":3417,"source":14,"faults":[],"target":7,"desc":""},{"val":"i == 5;\n","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":17,"additional":"","argelem":3418,"source":7,"faults":[4],"target":6,"desc":"i = i + 1;"},{"val":"i == 5;\ni == 5;","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":17,"additional":"","argelem":3420,"source":6,"faults":[],"target":9,"desc":"[!(i <= 4)]"},{"val":"test == 5;\ntest == 5;","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":32,"additional":"","argelem":3422,"source":9,"faults":[],"target":26,"desc":"[test != 8]"},{"val":"","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":0,"line":33,"additional":"","argelem":3423,"source":26,"faults":[],"target":30,"desc":"Goto: ERROR"}],
-"faults":[{"score":15,"reason":"Error suspected on line(s): <strong>26<\/strong><br><br>Detected <strong>1<\/strong> possible reason:<br><ol><li>So far, the following is responsible for the error: <ul><li>\"values of main::a\"<\/li><\/ul><\/li><\/ol><br><strong>1<\/strong> hint is available:<br><ul id=\"hint-list\"><li>From now on, the following is responsible for the error: <ul><li>¬ ((main::test = 8_32))<\/li><\/ul><\/li><\/ul><br>","rank":1,"lines":[26],"descriptions":["test = s;"]},{"score":26,"reason":"Error suspected on line(s): <strong>21<\/strong><br><br>Detected <strong>1<\/strong> possible reason:<br><ol><li>So far, the following is responsible for the error: <ul><li>( main::s = 0_1) <\/li><li> \"values of main::a\"<\/li><\/ul><\/li><\/ol><br><strong>1<\/strong> hint is available:<br><ul id=\"hint-list\"><li>From now on, the following is responsible for the error: <ul><li>\"values of main::a\"<\/li><\/ul><\/li><\/ul><br>","rank":2,"lines":[21],"descriptions":["[k <= j]"]},{"score":18,"reason":"Error suspected on line(s): <strong>22<\/strong><br><br>Detected <strong>1<\/strong> possible reason:<br><ol><li>So far, the following is responsible for the error: <ul><li>\"values of main::a\"<\/li><\/ul><\/li><\/ol><br>Found <strong>1<\/strong> possible bug-fix:<br><ul id=\"fix-list\"><li>Detected a suspicious operation within the array brackets. Perhaps adapting the calculation fixes the bug.<\/li><\/ul><br><strong>1<\/strong> hint is available:<br><ul id=\"hint-list\"><li>From now on, the following is responsible for the error: <ul><li>\"values of main::a\"<\/li><\/ul><\/li><\/ul><br>","rank":3,"lines":[22],"descriptions":["s = s + (a[k - 1]);"]},{"score":18,"reason":"Error suspected on line(s): <strong>21<\/strong><br><br>Detected <strong>1<\/strong> possible reason:<br><ol><li>So far, the following is responsible for the error: <ul><li>(main::k = 2_32) <\/li><li> \"values of main::a\" <\/li><li> (main::k = (1_32 + main::i))<\/li><\/ul><\/li><\/ol><br><strong>1<\/strong> hint is available:<br><ul id=\"hint-list\"><li>From now on, the following is responsible for the error: <ul><li>( main::s = 0_1) <\/li><li> \"values of main::a\"<\/li><\/ul><\/li><\/ul><br>","rank":4,"lines":[21],"descriptions":["k = k + 1;"]},{"score":20,"reason":"Error suspected on line(s): <strong>17<\/strong><br><br>Detected <strong>1<\/strong> possible reason:<br><ol><li>So far, the following is responsible for the error: <ul><li>\"values of main::a\"<\/li><\/ul><\/li><\/ol><br><strong>1<\/strong> hint is available:<br><ul id=\"hint-list\"><li>From now on, the following is responsible for the error: <ul><li>(main::k = 2_32) <\/li><li> \"values of main::a\" <\/li><li> (main::k = (1_32 + main::i))<\/li><\/ul><\/li><\/ul><br>","rank":5,"lines":[17],"descriptions":["i = i + 1;"]}],
+"errorPath":[{"val":"","file":"<none>","importance":0,"line":0,"additional":"","argelem":0,"source":1,"faults":[],"target":33,"desc":"INIT GLOBAL VARS"},{"val":"","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":0,"line":8,"additional":"","argelem":13,"source":33,"faults":[],"target":34,"desc":"int main();"},{"val":"","file":"<none>","importance":0,"line":0,"additional":"","source":34,"faults":[],"target":2,"desc":"Function start dummy edge"},{"val":"(&a) == 4LL;\n(a[0]) == -2;\n(a[1]) == 5;\n(a[2]) == -2;\n(a[3]) == 5;\n","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":0,"line":11,"additional":"","source":2,"faults":[],"target":3,"desc":"int a[4] = { -2, 5, -2, 5 };"},{"val":"test == 0;\n","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":13,"additional":"","source":3,"faults":[],"target":4,"desc":"int test = 0;"},{"val":"(a[2]) == -2;\n(a[3]) == 5;\ntest == 0;\n(&a) == 4LL;\n(a[0]) == -2;\n(a[1]) == 5;\n","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":0,"line":17,"additional":"","source":4,"faults":[],"target":5,"desc":"for"},{"val":"i == 1;\n","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":17,"additional":"","argelem":14,"source":5,"faults":[],"target":6,"desc":"int i = 1;"},{"val":"i == 1;\ni == 1;","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":17,"additional":"","argelem":2702,"source":6,"faults":[],"target":8,"desc":"[i <= 4]"},{"val":"","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":0,"line":18,"additional":"","argelem":2703,"source":8,"faults":[],"target":10,"desc":"for"},{"val":"j == 0;\n","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":18,"additional":"","argelem":2710,"source":10,"faults":[],"target":11,"desc":"int j = i - 1;"},{"val":"j == 0;\nj == 0;","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":18,"additional":"","argelem":2712,"source":11,"faults":[],"target":13,"desc":"[j < 4]"},{"val":"s == 0;\n","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":19,"additional":"","argelem":2713,"source":13,"faults":[],"target":15,"desc":"int s = 0;"},{"val":"s == 0;\n","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":0,"line":21,"additional":"","source":15,"faults":[],"target":16,"desc":"for"},{"val":"k == 1;\n","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":21,"additional":"","argelem":2717,"source":16,"faults":[],"target":17,"desc":"int k = i;"},{"val":"k == 1;\nj == 0;\nk == 1;\nj == 0;","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":21,"additional":"","argelem":2719,"source":17,"faults":[],"target":20,"desc":"[!(k <= j)]"},{"val":"s == 0;\ntest == 0;\ns == 0;\ntest == 0;","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":25,"additional":"","argelem":2721,"source":20,"faults":[],"target":22,"desc":"[!(s > test)]"},{"val":"","file":"<none>","importance":0,"line":0,"additional":"","argelem":2726,"source":22,"faults":[],"target":12,"desc":""},{"val":"j == 1;\n","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":18,"additional":"","argelem":2727,"source":12,"faults":[],"target":11,"desc":"j = j + 1;"},{"val":"j == 1;\nj == 1;","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":18,"additional":"","argelem":2729,"source":11,"faults":[],"target":13,"desc":"[j < 4]"},{"val":"s == 0;\n","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":19,"additional":"","argelem":2730,"source":13,"faults":[],"target":15,"desc":"int s = 0;"},{"val":"s == 0;\n","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":0,"line":21,"additional":"","source":15,"faults":[],"target":16,"desc":"for"},{"val":"k == 1;\n","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":21,"additional":"","argelem":2734,"source":16,"faults":[],"target":17,"desc":"int k = i;"},{"val":"k == 1;\nj == 1;\nk == 1;\nj == 1;","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":21,"additional":"","argelem":2736,"source":17,"faults":[1],"target":19,"desc":"[k <= j]"},{"val":"s == -2;\n","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":22,"additional":"","argelem":2737,"source":19,"faults":[2],"target":21,"desc":"s = s + (a[k - 1]);"},{"val":"s == -2;\n","file":"<none>","importance":0,"line":0,"additional":"","source":21,"faults":[],"target":18,"desc":""},{"val":"k == 2;\n","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":21,"additional":"","argelem":2747,"source":18,"faults":[3],"target":17,"desc":"k = k + 1;"},{"val":"k == 2;\nj == 1;\nk == 2;\nj == 1;","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":21,"additional":"","argelem":2750,"source":17,"faults":[],"target":20,"desc":"[!(k <= j)]"},{"val":"s == -2;\ntest == 0;\ns == -2;\ntest == 0;","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":25,"additional":"","argelem":2752,"source":20,"faults":[],"target":22,"desc":"[!(s > test)]"},{"val":"","file":"<none>","importance":0,"line":0,"additional":"","argelem":2757,"source":22,"faults":[],"target":12,"desc":""},{"val":"j == 2;\n","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":18,"additional":"","argelem":2758,"source":12,"faults":[],"target":11,"desc":"j = j + 1;"},{"val":"j == 2;\nj == 2;","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":18,"additional":"","argelem":2760,"source":11,"faults":[],"target":13,"desc":"[j < 4]"},{"val":"s == 0;\n","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":19,"additional":"","argelem":2761,"source":13,"faults":[],"target":15,"desc":"int s = 0;"},{"val":"s == 0;\n","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":0,"line":21,"additional":"","source":15,"faults":[],"target":16,"desc":"for"},{"val":"k == 1;\n","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":21,"additional":"","argelem":2765,"source":16,"faults":[],"target":17,"desc":"int k = i;"},{"val":"k == 1;\nj == 2;\nk == 1;\nj == 2;","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":21,"additional":"","argelem":2767,"source":17,"faults":[1],"target":19,"desc":"[k <= j]"},{"val":"s == -2;\n","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":22,"additional":"","argelem":2768,"source":19,"faults":[2],"target":21,"desc":"s = s + (a[k - 1]);"},{"val":"s == -2;\n","file":"<none>","importance":0,"line":0,"additional":"","source":21,"faults":[],"target":18,"desc":""},{"val":"k == 2;\n","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":21,"additional":"","argelem":2778,"source":18,"faults":[3],"target":17,"desc":"k = k + 1;"},{"val":"k == 2;\nj == 2;\nk == 2;\nj == 2;","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":21,"additional":"","argelem":2781,"source":17,"faults":[1],"target":19,"desc":"[k <= j]"},{"val":"s == 3;\n","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":22,"additional":"","argelem":2782,"source":19,"faults":[2],"target":21,"desc":"s = s + (a[k - 1]);"},{"val":"s == 3;\n","file":"<none>","importance":0,"line":0,"additional":"","source":21,"faults":[],"target":18,"desc":""},{"val":"k == 3;\n","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":21,"additional":"","argelem":2791,"source":18,"faults":[3],"target":17,"desc":"k = k + 1;"},{"val":"k == 3;\nj == 2;\nk == 3;\nj == 2;","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":21,"additional":"","argelem":2793,"source":17,"faults":[],"target":20,"desc":"[!(k <= j)]"},{"val":"s == 3;\ntest == 0;\ns == 3;\ntest == 0;","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":25,"additional":"","argelem":2795,"source":20,"faults":[],"target":23,"desc":"[s > test]"},{"val":"test == 3;\n","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":26,"additional":"","argelem":2796,"source":23,"faults":[0],"target":24,"desc":"test = s;"},{"val":"","file":"<none>","importance":0,"line":0,"additional":"","argelem":2798,"source":24,"faults":[],"target":22,"desc":""},{"val":"","file":"<none>","importance":0,"line":0,"additional":"","argelem":2800,"source":22,"faults":[],"target":12,"desc":""},{"val":"j == 3;\n","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":18,"additional":"","argelem":2801,"source":12,"faults":[],"target":11,"desc":"j = j + 1;"},{"val":"j == 3;\nj == 3;","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":18,"additional":"","argelem":2803,"source":11,"faults":[],"target":13,"desc":"[j < 4]"},{"val":"s == 0;\n","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":19,"additional":"","argelem":2804,"source":13,"faults":[],"target":15,"desc":"int s = 0;"},{"val":"s == 0;\n","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":0,"line":21,"additional":"","source":15,"faults":[],"target":16,"desc":"for"},{"val":"k == 1;\n","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":21,"additional":"","argelem":2808,"source":16,"faults":[],"target":17,"desc":"int k = i;"},{"val":"k == 1;\nj == 3;\nk == 1;\nj == 3;","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":21,"additional":"","argelem":2810,"source":17,"faults":[1],"target":19,"desc":"[k <= j]"},{"val":"s == -2;\n","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":22,"additional":"","argelem":2811,"source":19,"faults":[2],"target":21,"desc":"s = s + (a[k - 1]);"},{"val":"s == -2;\n","file":"<none>","importance":0,"line":0,"additional":"","source":21,"faults":[],"target":18,"desc":""},{"val":"k == 2;\n","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":21,"additional":"","argelem":2821,"source":18,"faults":[3],"target":17,"desc":"k = k + 1;"},{"val":"k == 2;\nj == 3;\nk == 2;\nj == 3;","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":21,"additional":"","argelem":2824,"source":17,"faults":[1],"target":19,"desc":"[k <= j]"},{"val":"s == 3;\n","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":22,"additional":"","argelem":2825,"source":19,"faults":[2],"target":21,"desc":"s = s + (a[k - 1]);"},{"val":"s == 3;\n","file":"<none>","importance":0,"line":0,"additional":"","source":21,"faults":[],"target":18,"desc":""},{"val":"k == 3;\n","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":21,"additional":"","argelem":2834,"source":18,"faults":[3],"target":17,"desc":"k = k + 1;"},{"val":"k == 3;\nj == 3;\nk == 3;\nj == 3;","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":21,"additional":"","argelem":2836,"source":17,"faults":[1],"target":19,"desc":"[k <= j]"},{"val":"s == 1;\n","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":22,"additional":"","argelem":2837,"source":19,"faults":[2],"target":21,"desc":"s = s + (a[k - 1]);"},{"val":"s == 1;\n","file":"<none>","importance":0,"line":0,"additional":"","source":21,"faults":[],"target":18,"desc":""},{"val":"k == 4;\n","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":21,"additional":"","argelem":2846,"source":18,"faults":[3],"target":17,"desc":"k = k + 1;"},{"val":"k == 4;\nj == 3;\nk == 4;\nj == 3;","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":21,"additional":"","argelem":2848,"source":17,"faults":[],"target":20,"desc":"[!(k <= j)]"},{"val":"s == 1;\ntest == 3;\ns == 1;\ntest == 3;","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":25,"additional":"","argelem":2850,"source":20,"faults":[],"target":22,"desc":"[!(s > test)]"},{"val":"","file":"<none>","importance":0,"line":0,"additional":"","argelem":2855,"source":22,"faults":[],"target":12,"desc":""},{"val":"j == 4;\n","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":18,"additional":"","argelem":2856,"source":12,"faults":[],"target":11,"desc":"j = j + 1;"},{"val":"j == 4;\nj == 4;","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":18,"additional":"","argelem":2858,"source":11,"faults":[],"target":14,"desc":"[!(j < 4)]"},{"val":"","file":"<none>","importance":0,"line":0,"additional":"","argelem":2860,"source":14,"faults":[],"target":7,"desc":""},{"val":"i == 2;\n","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":17,"additional":"","argelem":2861,"source":7,"faults":[4],"target":6,"desc":"i = i + 1;"},{"val":"i == 2;\ni == 2;","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":17,"additional":"","argelem":2863,"source":6,"faults":[],"target":8,"desc":"[i <= 4]"},{"val":"","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":0,"line":18,"additional":"","argelem":2864,"source":8,"faults":[],"target":10,"desc":"for"},{"val":"j == 1;\n","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":18,"additional":"","argelem":2871,"source":10,"faults":[],"target":11,"desc":"int j = i - 1;"},{"val":"j == 1;\nj == 1;","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":18,"additional":"","argelem":2873,"source":11,"faults":[],"target":13,"desc":"[j < 4]"},{"val":"s == 0;\n","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":19,"additional":"","argelem":2874,"source":13,"faults":[],"target":15,"desc":"int s = 0;"},{"val":"s == 0;\n","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":0,"line":21,"additional":"","source":15,"faults":[],"target":16,"desc":"for"},{"val":"k == 2;\n","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":21,"additional":"","argelem":2879,"source":16,"faults":[],"target":17,"desc":"int k = i;"},{"val":"k == 2;\nj == 1;\nk == 2;\nj == 1;","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":21,"additional":"","argelem":2883,"source":17,"faults":[],"target":20,"desc":"[!(k <= j)]"},{"val":"s == 0;\ntest == 3;\ns == 0;\ntest == 3;","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":25,"additional":"","argelem":2887,"source":20,"faults":[],"target":22,"desc":"[!(s > test)]"},{"val":"","file":"<none>","importance":0,"line":0,"additional":"","argelem":2897,"source":22,"faults":[],"target":12,"desc":""},{"val":"j == 2;\n","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":18,"additional":"","argelem":2899,"source":12,"faults":[],"target":11,"desc":"j = j + 1;"},{"val":"j == 2;\nj == 2;","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":18,"additional":"","argelem":2919,"source":11,"faults":[],"target":13,"desc":"[j < 4]"},{"val":"s == 0;\n","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":19,"additional":"","argelem":2920,"source":13,"faults":[],"target":15,"desc":"int s = 0;"},{"val":"s == 0;\n","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":0,"line":21,"additional":"","source":15,"faults":[],"target":16,"desc":"for"},{"val":"k == 2;\n","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":21,"additional":"","argelem":2924,"source":16,"faults":[],"target":17,"desc":"int k = i;"},{"val":"k == 2;\nj == 2;\nk == 2;\nj == 2;","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":21,"additional":"","argelem":2926,"source":17,"faults":[1],"target":19,"desc":"[k <= j]"},{"val":"s == 5;\n","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":22,"additional":"","argelem":2927,"source":19,"faults":[2],"target":21,"desc":"s = s + (a[k - 1]);"},{"val":"s == 5;\n","file":"<none>","importance":0,"line":0,"additional":"","source":21,"faults":[],"target":18,"desc":""},{"val":"k == 3;\n","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":21,"additional":"","argelem":2960,"source":18,"faults":[3],"target":17,"desc":"k = k + 1;"},{"val":"k == 3;\nj == 2;\nk == 3;\nj == 2;","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":21,"additional":"","argelem":2992,"source":17,"faults":[],"target":20,"desc":"[!(k <= j)]"},{"val":"s == 5;\ntest == 3;\ns == 5;\ntest == 3;","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":25,"additional":"","argelem":2994,"source":20,"faults":[],"target":23,"desc":"[s > test]"},{"val":"test == 5;\n","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":26,"additional":"","argelem":2995,"source":23,"faults":[0],"target":24,"desc":"test = s;"},{"val":"","file":"<none>","importance":0,"line":0,"additional":"","argelem":2997,"source":24,"faults":[],"target":22,"desc":""},{"val":"","file":"<none>","importance":0,"line":0,"additional":"","argelem":2999,"source":22,"faults":[],"target":12,"desc":""},{"val":"j == 3;\n","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":18,"additional":"","argelem":3000,"source":12,"faults":[],"target":11,"desc":"j = j + 1;"},{"val":"j == 3;\nj == 3;","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":18,"additional":"","argelem":3002,"source":11,"faults":[],"target":13,"desc":"[j < 4]"},{"val":"s == 0;\n","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":19,"additional":"","argelem":3003,"source":13,"faults":[],"target":15,"desc":"int s = 0;"},{"val":"s == 0;\n","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":0,"line":21,"additional":"","source":15,"faults":[],"target":16,"desc":"for"},{"val":"k == 2;\n","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":21,"additional":"","argelem":3007,"source":16,"faults":[],"target":17,"desc":"int k = i;"},{"val":"k == 2;\nj == 3;\nk == 2;\nj == 3;","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":21,"additional":"","argelem":3009,"source":17,"faults":[1],"target":19,"desc":"[k <= j]"},{"val":"s == 5;\n","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":22,"additional":"","argelem":3010,"source":19,"faults":[2],"target":21,"desc":"s = s + (a[k - 1]);"},{"val":"s == 5;\n","file":"<none>","importance":0,"line":0,"additional":"","source":21,"faults":[],"target":18,"desc":""},{"val":"k == 3;\n","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":21,"additional":"","argelem":3020,"source":18,"faults":[3],"target":17,"desc":"k = k + 1;"},{"val":"k == 3;\nj == 3;\nk == 3;\nj == 3;","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":21,"additional":"","argelem":3081,"source":17,"faults":[1],"target":19,"desc":"[k <= j]"},{"val":"s == 3;\n","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":22,"additional":"","argelem":3082,"source":19,"faults":[2],"target":21,"desc":"s = s + (a[k - 1]);"},{"val":"s == 3;\n","file":"<none>","importance":0,"line":0,"additional":"","source":21,"faults":[],"target":18,"desc":""},{"val":"k == 4;\n","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":21,"additional":"","argelem":3091,"source":18,"faults":[3],"target":17,"desc":"k = k + 1;"},{"val":"k == 4;\nj == 3;\nk == 4;\nj == 3;","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":21,"additional":"","argelem":3134,"source":17,"faults":[],"target":20,"desc":"[!(k <= j)]"},{"val":"s == 3;\ntest == 5;\ns == 3;\ntest == 5;","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":25,"additional":"","argelem":3136,"source":20,"faults":[],"target":22,"desc":"[!(s > test)]"},{"val":"","file":"<none>","importance":0,"line":0,"additional":"","argelem":3141,"source":22,"faults":[],"target":12,"desc":""},{"val":"j == 4;\n","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":18,"additional":"","argelem":3142,"source":12,"faults":[],"target":11,"desc":"j = j + 1;"},{"val":"j == 4;\nj == 4;","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":18,"additional":"","argelem":3144,"source":11,"faults":[],"target":14,"desc":"[!(j < 4)]"},{"val":"","file":"<none>","importance":0,"line":0,"additional":"","argelem":3146,"source":14,"faults":[],"target":7,"desc":""},{"val":"i == 3;\n","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":17,"additional":"","argelem":3147,"source":7,"faults":[4],"target":6,"desc":"i = i + 1;"},{"val":"i == 3;\ni == 3;","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":17,"additional":"","argelem":3149,"source":6,"faults":[],"target":8,"desc":"[i <= 4]"},{"val":"","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":0,"line":18,"additional":"","argelem":3150,"source":8,"faults":[],"target":10,"desc":"for"},{"val":"j == 2;\n","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":18,"additional":"","argelem":3157,"source":10,"faults":[],"target":11,"desc":"int j = i - 1;"},{"val":"j == 2;\nj == 2;","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":18,"additional":"","argelem":3159,"source":11,"faults":[],"target":13,"desc":"[j < 4]"},{"val":"s == 0;\n","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":19,"additional":"","argelem":3160,"source":13,"faults":[],"target":15,"desc":"int s = 0;"},{"val":"s == 0;\n","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":0,"line":21,"additional":"","source":15,"faults":[],"target":16,"desc":"for"},{"val":"k == 3;\n","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":21,"additional":"","argelem":3165,"source":16,"faults":[],"target":17,"desc":"int k = i;"},{"val":"k == 3;\nj == 2;\nk == 3;\nj == 2;","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":21,"additional":"","argelem":3169,"source":17,"faults":[],"target":20,"desc":"[!(k <= j)]"},{"val":"s == 0;\ntest == 5;\ns == 0;\ntest == 5;","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":25,"additional":"","argelem":3173,"source":20,"faults":[],"target":22,"desc":"[!(s > test)]"},{"val":"","file":"<none>","importance":0,"line":0,"additional":"","argelem":3183,"source":22,"faults":[],"target":12,"desc":""},{"val":"j == 3;\n","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":18,"additional":"","argelem":3185,"source":12,"faults":[],"target":11,"desc":"j = j + 1;"},{"val":"j == 3;\nj == 3;","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":18,"additional":"","argelem":3205,"source":11,"faults":[],"target":13,"desc":"[j < 4]"},{"val":"s == 0;\n","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":19,"additional":"","argelem":3206,"source":13,"faults":[],"target":15,"desc":"int s = 0;"},{"val":"s == 0;\n","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":0,"line":21,"additional":"","source":15,"faults":[],"target":16,"desc":"for"},{"val":"k == 3;\n","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":21,"additional":"","argelem":3210,"source":16,"faults":[],"target":17,"desc":"int k = i;"},{"val":"k == 3;\nj == 3;\nk == 3;\nj == 3;","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":21,"additional":"","argelem":3212,"source":17,"faults":[1],"target":19,"desc":"[k <= j]"},{"val":"s == -2;\n","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":22,"additional":"","argelem":3213,"source":19,"faults":[2],"target":21,"desc":"s = s + (a[k - 1]);"},{"val":"s == -2;\n","file":"<none>","importance":0,"line":0,"additional":"","source":21,"faults":[],"target":18,"desc":""},{"val":"k == 4;\n","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":21,"additional":"","argelem":3264,"source":18,"faults":[3],"target":17,"desc":"k = k + 1;"},{"val":"k == 4;\nj == 3;\nk == 4;\nj == 3;","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":21,"additional":"","argelem":3344,"source":17,"faults":[],"target":20,"desc":"[!(k <= j)]"},{"val":"s == -2;\ntest == 5;\ns == -2;\ntest == 5;","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":25,"additional":"","argelem":3346,"source":20,"faults":[],"target":22,"desc":"[!(s > test)]"},{"val":"","file":"<none>","importance":0,"line":0,"additional":"","argelem":3351,"source":22,"faults":[],"target":12,"desc":""},{"val":"j == 4;\n","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":18,"additional":"","argelem":3352,"source":12,"faults":[],"target":11,"desc":"j = j + 1;"},{"val":"j == 4;\nj == 4;","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":18,"additional":"","argelem":3354,"source":11,"faults":[],"target":14,"desc":"[!(j < 4)]"},{"val":"","file":"<none>","importance":0,"line":0,"additional":"","argelem":3356,"source":14,"faults":[],"target":7,"desc":""},{"val":"i == 4;\n","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":17,"additional":"","argelem":3357,"source":7,"faults":[4],"target":6,"desc":"i = i + 1;"},{"val":"i == 4;\ni == 4;","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":17,"additional":"","argelem":3359,"source":6,"faults":[],"target":8,"desc":"[i <= 4]"},{"val":"","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":0,"line":18,"additional":"","argelem":3360,"source":8,"faults":[],"target":10,"desc":"for"},{"val":"j == 3;\n","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":18,"additional":"","argelem":3367,"source":10,"faults":[],"target":11,"desc":"int j = i - 1;"},{"val":"j == 3;\nj == 3;","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":18,"additional":"","argelem":3369,"source":11,"faults":[],"target":13,"desc":"[j < 4]"},{"val":"s == 0;\n","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":19,"additional":"","argelem":3370,"source":13,"faults":[],"target":15,"desc":"int s = 0;"},{"val":"s == 0;\n","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":0,"line":21,"additional":"","source":15,"faults":[],"target":16,"desc":"for"},{"val":"k == 4;\n","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":21,"additional":"","argelem":3375,"source":16,"faults":[],"target":17,"desc":"int k = i;"},{"val":"k == 4;\nj == 3;\nk == 4;\nj == 3;","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":21,"additional":"","argelem":3379,"source":17,"faults":[],"target":20,"desc":"[!(k <= j)]"},{"val":"s == 0;\ntest == 5;\ns == 0;\ntest == 5;","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":25,"additional":"","argelem":3383,"source":20,"faults":[],"target":22,"desc":"[!(s > test)]"},{"val":"","file":"<none>","importance":0,"line":0,"additional":"","argelem":3393,"source":22,"faults":[],"target":12,"desc":""},{"val":"j == 4;\n","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":18,"additional":"","argelem":3395,"source":12,"faults":[],"target":11,"desc":"j = j + 1;"},{"val":"j == 4;\nj == 4;","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":18,"additional":"","argelem":3415,"source":11,"faults":[],"target":14,"desc":"[!(j < 4)]"},{"val":"","file":"<none>","importance":0,"line":0,"additional":"","argelem":3417,"source":14,"faults":[],"target":7,"desc":""},{"val":"i == 5;\n","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":17,"additional":"","argelem":3418,"source":7,"faults":[4],"target":6,"desc":"i = i + 1;"},{"val":"i == 5;\ni == 5;","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":17,"additional":"","argelem":3420,"source":6,"faults":[],"target":9,"desc":"[!(i <= 4)]"},{"val":"test == 5;\ntest == 5;","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":1,"line":32,"additional":"","argelem":3422,"source":9,"faults":[],"target":26,"desc":"[test != 8]"},{"val":"","file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","importance":0,"line":33,"additional":"","argelem":3423,"source":26,"faults":[],"target":30,"desc":"Goto: ERROR"}],
+"faults":[{"score":15,"reason":"Error suspected on line(s): <strong>26<\/strong><br><br>Detected <strong>1<\/strong> possible reason:<br><ol><li>So far, the following is responsible for the error: <ul><li>\"values of main::a\"<\/li><\/ul><\/li><\/ol><br><strong>1<\/strong> hint is available:<br><ul id=\"hint-list\"><li>From now on, the following is responsible for the error: <ul><li>\"values of main::a\"<\/li><\/ul><\/li><\/ul><br>","rank":1},{"score":26,"reason":"Error suspected on line(s): <strong>21<\/strong><br><br>Detected <strong>1<\/strong> possible reason:<br><ol><li>So far, the following is responsible for the error: <ul><li>( main::s = 0_1) <\/li><li> \"values of main::a\"<\/li><\/ul><\/li><\/ol><br><strong>1<\/strong> hint is available:<br><ul id=\"hint-list\"><li>From now on, the following is responsible for the error: <ul><li>\"values of main::a\"<\/li><\/ul><\/li><\/ul><br>","rank":2},{"score":18,"reason":"Error suspected on line(s): <strong>22<\/strong><br><br>Detected <strong>1<\/strong> possible reason:<br><ol><li>So far, the following is responsible for the error: <ul><li>\"values of main::a\"<\/li><\/ul><\/li><\/ol><br>Found <strong>1<\/strong> possible bug-fix:<br><ul id=\"fix-list\"><li>Detected a suspicious operation within the array brackets. Perhaps adapting the calculation fixes the bug.<\/li><\/ul><br><strong>1<\/strong> hint is available:<br><ul id=\"hint-list\"><li>From now on, the following is responsible for the error: <ul><li>\"values of main::a\"<\/li><\/ul><\/li><\/ul><br>","rank":3},{"score":18,"reason":"Error suspected on line(s): <strong>21<\/strong><br><br>Detected <strong>1<\/strong> possible reason:<br><ol><li>So far, the following is responsible for the error: <ul><li>(main::k = 2_32) <\/li><li> \"values of main::a\" <\/li><li> (main::k = (1_32 + main::i))<\/li><\/ul><\/li><\/ol><br><strong>1<\/strong> hint is available:<br><ul id=\"hint-list\"><li>From now on, the following is responsible for the error: <ul><li>( main::s = 0_1) <\/li><li> \"values of main::a\"<\/li><\/ul><\/li><\/ul><br>","rank":4},{"score":20,"reason":"Error suspected on line(s): <strong>17<\/strong><br><br>Detected <strong>1<\/strong> possible reason:<br><ol><li>So far, the following is responsible for the error: <ul><li>\"values of main::a\"<\/li><\/ul><\/li><\/ol><br><strong>1<\/strong> hint is available:<br><ul id=\"hint-list\"><li>From now on, the following is responsible for the error: <ul><li>(main::k = 2_32) <\/li><li> \"values of main::a\" <\/li><li> (main::k = (1_32 + main::i))<\/li><\/ul><\/li><\/ul><br>","rank":5}],
 "nodes":[{"func":"main","loop":false,"index":0,"rpid":17,"type":"exit"},{"func":"main","loop":false,"index":1,"rpid":31,"type":"entry"},{"func":"main","loop":false,"index":2,"rpid":28,"type":""},{"func":"main","loop":false,"index":3,"rpid":27,"type":""},{"func":"main","loop":false,"index":4,"rpid":26,"type":""},{"func":"main","loop":false,"index":5,"rpid":25,"type":""},{"func":"main","loop":true,"index":6,"rpid":24,"type":""},{"func":"main","loop":false,"index":7,"rpid":12,"type":""},{"func":"main","loop":false,"index":8,"rpid":16,"type":""},{"func":"main","loop":false,"index":9,"rpid":23,"type":""},{"func":"main","loop":false,"index":10,"rpid":15,"type":""},{"func":"main","loop":true,"index":11,"rpid":14,"type":""},{"func":"main","loop":false,"index":12,"rpid":3,"type":""},{"func":"main","loop":false,"index":13,"rpid":11,"type":""},{"func":"main","loop":false,"index":14,"rpid":13,"type":""},{"func":"main","loop":false,"index":15,"rpid":10,"type":""},{"func":"main","loop":false,"index":16,"rpid":9,"type":""},{"func":"main","loop":true,"index":17,"rpid":8,"type":""},{"func":"main","loop":false,"index":18,"rpid":0,"type":""},{"func":"main","loop":false,"index":19,"rpid":2,"type":""},{"func":"main","loop":false,"index":20,"rpid":7,"type":""},{"func":"main","loop":false,"index":21,"rpid":1,"type":""},{"func":"main","loop":false,"index":22,"rpid":4,"type":""},{"func":"main","loop":false,"index":23,"rpid":6,"type":""},{"func":"main","loop":false,"index":24,"rpid":5,"type":""},{"func":"main","loop":false,"index":25,"rpid":22,"type":""},{"func":"main","loop":false,"index":26,"rpid":20,"type":""},{"func":"main","loop":false,"index":28,"rpid":21,"type":""},{"func":"main","loop":false,"index":30,"rpid":19,"type":""},{"func":"main","loop":false,"index":31,"rpid":18,"type":""},{"func":"main","loop":false,"index":33,"rpid":30,"type":""},{"func":"main","loop":false,"index":34,"rpid":29,"type":""}],
 "edges":[{"file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","line":18,"source":12,"type":"StatementEdge","stmt":"j = j + 1;","target":11},{"file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","line":26,"source":23,"type":"StatementEdge","stmt":"test = s;","target":24},{"file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","line":36,"source":28,"type":"ReturnStatementEdge","stmt":"return 0;","target":0},{"file":"<none>","line":0,"source":1,"type":"BlankEdge","stmt":"INIT GLOBAL VARS","target":33},{"file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","line":21,"source":17,"type":"AssumeEdge","stmt":"[k <= j]","target":19},{"file":"<none>","line":0,"source":34,"type":"BlankEdge","stmt":"Function start dummy edge","target":2},{"file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","line":13,"source":3,"type":"DeclarationEdge","stmt":"int test = 0;","target":4},{"file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","line":17,"source":5,"type":"DeclarationEdge","stmt":"int i = 1;","target":6},{"file":"<none>","line":0,"source":21,"type":"BlankEdge","stmt":"","target":18},{"file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","line":22,"source":19,"type":"StatementEdge","stmt":"s = s + (a[k - 1]);","target":21},{"file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","line":18,"source":11,"type":"AssumeEdge","stmt":"[!(j < 4)]","target":14},{"file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","line":32,"source":9,"type":"AssumeEdge","stmt":"[!(test != 8)]","target":25},{"file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","line":32,"source":9,"type":"AssumeEdge","stmt":"[test != 8]","target":26},{"file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","line":18,"source":11,"type":"AssumeEdge","stmt":"[j < 4]","target":13},{"file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","line":17,"source":7,"type":"StatementEdge","stmt":"i = i + 1;","target":6},{"file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","line":21,"source":16,"type":"DeclarationEdge","stmt":"int k = i;","target":17},{"file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","line":8,"source":33,"type":"DeclarationEdge","stmt":"int main();","target":34},{"file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","line":18,"source":8,"type":"BlankEdge","stmt":"for","target":10},{"file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","line":25,"source":20,"type":"AssumeEdge","stmt":"[!(s > test)]","target":22},{"file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","line":37,"source":31,"type":"ReturnStatementEdge","stmt":"return 1;","target":0},{"file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","line":11,"source":2,"type":"DeclarationEdge","stmt":"int a[4] = { -2, 5, -2, 5 };","target":3},{"file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","line":18,"source":10,"type":"DeclarationEdge","stmt":"int j = i - 1;","target":11},{"file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","line":21,"source":15,"type":"BlankEdge","stmt":"for","target":16},{"file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","line":17,"source":4,"type":"BlankEdge","stmt":"for","target":5},{"file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","line":17,"source":6,"type":"AssumeEdge","stmt":"[i <= 4]","target":8},{"file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","line":36,"source":25,"type":"BlankEdge","stmt":"Label: EXIT","target":28},{"file":"<none>","line":0,"source":14,"type":"BlankEdge","stmt":"","target":7},{"file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","line":17,"source":6,"type":"AssumeEdge","stmt":"[!(i <= 4)]","target":9},{"file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","line":37,"source":30,"type":"BlankEdge","stmt":"Label: ERROR","target":31},{"file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","line":21,"source":17,"type":"AssumeEdge","stmt":"[!(k <= j)]","target":20},{"file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","line":33,"source":26,"type":"BlankEdge","stmt":"Goto: ERROR","target":30},{"file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","line":19,"source":13,"type":"DeclarationEdge","stmt":"int s = 0;","target":15},{"file":"<none>","line":0,"source":24,"type":"BlankEdge","stmt":"","target":22},{"file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","line":21,"source":18,"type":"StatementEdge","stmt":"k = k + 1;","target":17},{"file":"<none>","line":0,"source":22,"type":"BlankEdge","stmt":"","target":12},{"file":"test\/programs\/simple\/fault_localization\/tested\/ready\/survey\/mss_false-unreach.c","line":25,"source":20,"type":"AssumeEdge","stmt":"[s > test]","target":23}]
 }
@@ -3187,7 +3224,7 @@ function init() {
       Report for
 test/programs/simple/fault_localization/tested/ready/survey/mss_false-unreach.c (Counterexample 2)    </h1>
     <span class="badge badge-info generated">
-Generated on 2020-05-11 18:07:36 by CPAchecker 1.9.1-svn / predicateAnalysis    </span>
+Generated on 2020-05-15 14:35:09 by CPAchecker 1.9.1-svn / predicateAnalysis    </span>
   </header>
 
   <div class="modal fade" id="renderStateModal" role="dialog" aria-hidden="true">
@@ -3262,21 +3299,43 @@ Generated on 2020-05-11 18:07:36 by CPAchecker 1.9.1-svn / predicateAnalysis    
             </td>
           </tr>
         </table>
-          <table ng-show="hideErrorTable" class="fault-table" ng-repeat="edge in faults">
-            <tr id="fault-{{$index}}">
-              <td ng-click="showLines(edge.lines)" data-toggle="tooltip" data-placement="bottom" title="Rank">
-                <pre>{{edge.rank}}.</pre>
+          <table ng-show="hideErrorTable" ng-click="clickedFaultLocElement($event)" class="fault-table" ng-repeat="fault in faults" id="fault-{{$index}}">
+            <tr>
+              <td class="fault-rank" data-toggle="tooltip" data-placement="bottom" title="Rank">
+                {{fault.rank}}.
               </td>
-              <td ng-click="showLines(edge.lines)" data-toggle="tooltip" data-placement="bottom" title="Score">
-                <pre>{{edge.score}}</pre>
+              <td class="fault-score" data-toggle="tooltip" data-placement="bottom" title="Score">
+                {{fault.score}}
               </td>
-              <td>
-                <select><option ng-repeat="descr in edge.descriptions track by $index" ng-click="showRedLine($index, edge)" value="{{descr}}">{{descr}}</option></select>
+              <td class="fault-details-header">
+                Details:
               </td>
             </tr>
-            <tr>
-              <td colspan="3" ng-click="showLines(edge.lines)" html=true>
-                <div ng-bind-html="htmlTrusted(edge.reason)"></div>
+            <tr class="fault-details">
+              <td colspan="3" html=true>
+                <div ng-bind-html="htmlTrusted(fault.reason)"></div>
+
+                Relevant lines:
+                <ul class="fault-lines">
+                  <li ng-repeat="elem in fault.lines">
+                    <span class="line-number">{{elem.line}}</span>
+                    <span class="line-content">{{elem.desc}}</span>
+                  </li>
+                </ul>
+
+                <details>
+                  <summary>
+                    <strong>Current values:</strong>
+                  </summary>
+                  <table id="fault-values">
+                    <tr><td>Name</td><td>Value</td></tr>
+                    <tr ng-repeat="(variable,value) in fault.valDict">
+                      <td ng-bind-html="htmlTrusted(variable)"></td>
+                      <td ng-bind-html="htmlTrusted(value)"></td>
+                    </tr>
+                  </table>
+                </details>
+
               </td>
             </tr>
           </table>
@@ -3456,18 +3515,18 @@ Generated on 2020-05-11 18:07:36 by CPAchecker 1.9.1-svn / predicateAnalysis    
       </div>
       <div class="fileContent content" ng-show="tabIsSet(4)" ng-class="{active: tabIsSet(4)}">
 <table  id="log_table" class="display" style="width:100%;padding: 10px" class="table table-bordered"><thead class="thead-light"><tr><th scope="col">Date</th><th scope="col">Time</th><th scope="col">Level</th><th scope="col">Component</th><th scope="col">Message</th></tr></thead><tbody>
-<tr id="log-0"><th scope="row">2020-05-11</th><td>18:06:33:351</td><td>INFO</td><td>CPAMain.detectFrontendLanguageIfNecessary</td><td>Language C detected and set for analysis</td></tr>
-<tr id="log-1"><th scope="row">2020-05-11</th><td>18:06:33:406</td><td>INFO</td><td>ResourceLimitChecker.fromConfiguration</td><td>Using the following resource limits: CPU-time limit of 900s</td></tr>
-<tr id="log-2"><th scope="row">2020-05-11</th><td>18:06:33:609</td><td>INFO</td><td>CPAchecker.run</td><td>CPAchecker 1.9.1-svn / predicateAnalysis (OpenJDK 64-Bit Server VM 11.0.4) started</td></tr>
-<tr id="log-3"><th scope="row">2020-05-11</th><td>18:06:33:688</td><td>INFO</td><td>CPAchecker.parse</td><td>Parsing CFA from file(s) &quot;test/programs/simple/fault_localization/tested/ready/survey/mss_false-unreach.c&quot;</td></tr>
-<tr id="log-4"><th scope="row">2020-05-11</th><td>18:06:36:645</td><td>INFO</td><td>PredicateCPA<br>PredicateCPA.&lt;init&gt;</td><td>Using predicate analysis with MathSAT5 version 5.5.4 (bd863fede57e) (Feb 21 2019 15:05:40, gmp 6.1.0, gcc 4.8.5, 64-bit, reentrant) and JFactory 1.21.</td></tr>
-<tr id="log-5"><th scope="row">2020-05-11</th><td>18:06:37:069</td><td>INFO</td><td>PredicateCPA<br>PredicateCPARefiner.&lt;init&gt;</td><td>Using refinement for predicate analysis with PredicateAbstractionRefinementStrategy strategy.</td></tr>
-<tr id="log-6"><th scope="row">2020-05-11</th><td>18:06:37:140</td><td>INFO</td><td>CPAchecker.runAlgorithm</td><td>Starting analysis ...</td></tr>
-<tr id="log-7"><th scope="row">2020-05-11</th><td>18:06:44:847</td><td>INFO</td><td>FaultLocalizationAlgorithm.run</td><td>Starting fault localization...</td></tr>
-<tr id="log-8"><th scope="row">2020-05-11</th><td>18:06:44:849</td><td>INFO</td><td>FaultLocalizationAlgorithm.run</td><td>Find explanations for fault #1</td></tr>
-<tr id="log-9"><th scope="row">2020-05-11</th><td>18:07:35:148</td><td>INFO</td><td>FaultLocalizationAlgorithm.runAlgorithm</td><td>Running ErrorInvariantsAlgorithm:<br>Error suspected on line(s): 26 (Score: 15). (Score: 15)<br>     REASON: So far, the following is responsible for the error: &lt;ul&gt;&lt;li&gt;&quot;values of main::a&quot;&lt;/li&gt;&lt;/ul&gt; (0.0%)<br>       HINT: From now on, the following is responsible for the error: &lt;ul&gt;&lt;li&gt;¬ ((main::test = 8_32))&lt;/li&gt;&lt;/ul&gt; (0.0%)<br>  RANK_INFO: Score calculated by edge type(s). (16.66%)<br>  RANK_INFO: This fault is 46 execution step(s) away from the error location. (14.47%)<br>Error suspected on line(s): 21 (Score: 26). (Score: 26)<br>     REASON: So far, the following is responsible for the error: &lt;ul&gt;&lt;li&gt;( main::s = 0_1) &lt;/li&gt;&lt;li&gt; &quot;values of main::a&quot;&lt;/li&gt;&lt;/ul&gt; (0.0%)<br>       HINT: From now on, the following is responsible for the error: &lt;ul&gt;&lt;li&gt;&quot;values of main::a&quot;&lt;/li&gt;&lt;/ul&gt; (0.0%)<br>  RANK_INFO: Score calculated by edge type(s). (33.33%)<br>  RANK_INFO: This fault is 19 execution step(s) away from the error location. (20.3%)<br>Error suspected on line(s): 22 (Score: 18). (Score: 18)<br>     REASON: So far, the following is responsible for the error: &lt;ul&gt;&lt;li&gt;&quot;values of main::a&quot;&lt;/li&gt;&lt;/ul&gt; (0.0%)<br>        FIX: Detected a suspicious operation within the array brackets. Perhaps adapting the calculation fixes the bug. (0.0%)<br>       HINT: From now on, the following is responsible for the error: &lt;ul&gt;&lt;li&gt;&quot;values of main::a&quot;&lt;/li&gt;&lt;/ul&gt; (0.0%)<br>  RANK_INFO: This fault is 18 execution step(s) away from the error location. (20.51%)<br>  RANK_INFO: Score calculated by edge type(s). (16.66%)<br>Error suspected on line(s): 21 (Score: 18). (Score: 18)<br>     REASON: So far, the following is responsible for the error: &lt;ul&gt;&lt;li&gt;(main::k = 2_32) &lt;/li&gt;&lt;li&gt; &quot;values of main::a&quot; &lt;/li&gt;&lt;li&gt; (main::k = (1_32 + main::i))&lt;/li&gt;&lt;/ul&gt; (0.0%)<br>       HINT: From now on, the following is responsible for the error: &lt;ul&gt;&lt;li&gt;( main::s = 0_1) &lt;/li&gt;&lt;li&gt; &quot;values of main::a&quot;&lt;/li&gt;&lt;/ul&gt; (0.0%)<br>  RANK_INFO: This fault is 17 execution step(s) away from the error location. (20.73%)<br>  RANK_INFO: Score calculated by edge type(s). (16.66%)<br>Error suspected on line(s): 17 (Score: 20). (Score: 20)<br>     REASON: So far, the following is responsible for the error: &lt;ul&gt;&lt;li&gt;&quot;values of main::a&quot;&lt;/li&gt;&lt;/ul&gt; (0.0%)<br>       HINT: From now on, the following is responsible for the error: &lt;ul&gt;&lt;li&gt;(main::k = 2_32) &lt;/li&gt;&lt;li&gt; &quot;values of main::a&quot; &lt;/li&gt;&lt;li&gt; (main::k = (1_32 + main::i))&lt;/li&gt;&lt;/ul&gt; (0.0%)<br>  RANK_INFO: This fault is 2 execution step(s) away from the error location. (23.97%)<br>  RANK_INFO: Score calculated by edge type(s). (16.66%)</td></tr>
-<tr id="log-10"><th scope="row">2020-05-11</th><td>18:07:35:161</td><td>INFO</td><td>FaultLocalizationAlgorithm.run</td><td>Stopping fault localization...</td></tr>
-<tr id="log-11"><th scope="row">2020-05-11</th><td>18:07:35:162</td><td>INFO</td><td>CPAchecker.runAlgorithm</td><td>Stopping analysis ...</td></tr>
+<tr id="log-0"><th scope="row">2020-05-15</th><td>14:34:06:672</td><td>INFO</td><td>CPAMain.detectFrontendLanguageIfNecessary</td><td>Language C detected and set for analysis</td></tr>
+<tr id="log-1"><th scope="row">2020-05-15</th><td>14:34:06:716</td><td>INFO</td><td>ResourceLimitChecker.fromConfiguration</td><td>Using the following resource limits: CPU-time limit of 900s</td></tr>
+<tr id="log-2"><th scope="row">2020-05-15</th><td>14:34:06:849</td><td>INFO</td><td>CPAchecker.run</td><td>CPAchecker 1.9.1-svn / predicateAnalysis (OpenJDK 64-Bit Server VM 11.0.4) started</td></tr>
+<tr id="log-3"><th scope="row">2020-05-15</th><td>14:34:06:900</td><td>INFO</td><td>CPAchecker.parse</td><td>Parsing CFA from file(s) &quot;test/programs/simple/fault_localization/tested/ready/survey/mss_false-unreach.c&quot;</td></tr>
+<tr id="log-4"><th scope="row">2020-05-15</th><td>14:34:09:992</td><td>INFO</td><td>PredicateCPA<br>PredicateCPA.&lt;init&gt;</td><td>Using predicate analysis with MathSAT5 version 5.5.4 (bd863fede57e) (Feb 21 2019 15:05:40, gmp 6.1.0, gcc 4.8.5, 64-bit, reentrant) and JFactory 1.21.</td></tr>
+<tr id="log-5"><th scope="row">2020-05-15</th><td>14:34:10:280</td><td>INFO</td><td>PredicateCPA<br>PredicateCPARefiner.&lt;init&gt;</td><td>Using refinement for predicate analysis with PredicateAbstractionRefinementStrategy strategy.</td></tr>
+<tr id="log-6"><th scope="row">2020-05-15</th><td>14:34:10:354</td><td>INFO</td><td>CPAchecker.runAlgorithm</td><td>Starting analysis ...</td></tr>
+<tr id="log-7"><th scope="row">2020-05-15</th><td>14:34:18:019</td><td>INFO</td><td>FaultLocalizationAlgorithm.run</td><td>Starting fault localization...</td></tr>
+<tr id="log-8"><th scope="row">2020-05-15</th><td>14:34:18:021</td><td>INFO</td><td>FaultLocalizationAlgorithm.run</td><td>Find explanations for fault #1</td></tr>
+<tr id="log-9"><th scope="row">2020-05-15</th><td>14:35:08:551</td><td>INFO</td><td>FaultLocalizationAlgorithm.runAlgorithm</td><td>Running ErrorInvariantsAlgorithm:<br>Error suspected on line(s): 26 (Score: 15). (Score: 15)<br>     REASON: So far, the following is responsible for the error: &lt;ul&gt;&lt;li&gt;&quot;values of main::a&quot;&lt;/li&gt;&lt;/ul&gt; (0.0%)<br>       HINT: From now on, the following is responsible for the error: &lt;ul&gt;&lt;li&gt;&quot;values of main::a&quot;&lt;/li&gt;&lt;/ul&gt; (0.0%)<br>  RANK_INFO: Score calculated by edge type(s). (16.66%)<br>  RANK_INFO: This fault is 46 execution step(s) away from the error location. (14.47%)<br>Error suspected on line(s): 21 (Score: 26). (Score: 26)<br>     REASON: So far, the following is responsible for the error: &lt;ul&gt;&lt;li&gt;( main::s = 0_1) &lt;/li&gt;&lt;li&gt; &quot;values of main::a&quot;&lt;/li&gt;&lt;/ul&gt; (0.0%)<br>       HINT: From now on, the following is responsible for the error: &lt;ul&gt;&lt;li&gt;&quot;values of main::a&quot;&lt;/li&gt;&lt;/ul&gt; (0.0%)<br>  RANK_INFO: Score calculated by edge type(s). (33.33%)<br>  RANK_INFO: This fault is 19 execution step(s) away from the error location. (20.3%)<br>Error suspected on line(s): 22 (Score: 18). (Score: 18)<br>     REASON: So far, the following is responsible for the error: &lt;ul&gt;&lt;li&gt;&quot;values of main::a&quot;&lt;/li&gt;&lt;/ul&gt; (0.0%)<br>        FIX: Detected a suspicious operation within the array brackets. Perhaps adapting the calculation fixes the bug. (0.0%)<br>       HINT: From now on, the following is responsible for the error: &lt;ul&gt;&lt;li&gt;&quot;values of main::a&quot;&lt;/li&gt;&lt;/ul&gt; (0.0%)<br>  RANK_INFO: This fault is 18 execution step(s) away from the error location. (20.51%)<br>  RANK_INFO: Score calculated by edge type(s). (16.66%)<br>Error suspected on line(s): 21 (Score: 18). (Score: 18)<br>     REASON: So far, the following is responsible for the error: &lt;ul&gt;&lt;li&gt;(main::k = 2_32) &lt;/li&gt;&lt;li&gt; &quot;values of main::a&quot; &lt;/li&gt;&lt;li&gt; (main::k = (1_32 + main::i))&lt;/li&gt;&lt;/ul&gt; (0.0%)<br>       HINT: From now on, the following is responsible for the error: &lt;ul&gt;&lt;li&gt;( main::s = 0_1) &lt;/li&gt;&lt;li&gt; &quot;values of main::a&quot;&lt;/li&gt;&lt;/ul&gt; (0.0%)<br>  RANK_INFO: This fault is 17 execution step(s) away from the error location. (20.73%)<br>  RANK_INFO: Score calculated by edge type(s). (16.66%)<br>Error suspected on line(s): 17 (Score: 20). (Score: 20)<br>     REASON: So far, the following is responsible for the error: &lt;ul&gt;&lt;li&gt;&quot;values of main::a&quot;&lt;/li&gt;&lt;/ul&gt; (0.0%)<br>       HINT: From now on, the following is responsible for the error: &lt;ul&gt;&lt;li&gt;(main::k = 2_32) &lt;/li&gt;&lt;li&gt; &quot;values of main::a&quot; &lt;/li&gt;&lt;li&gt; (main::k = (1_32 + main::i))&lt;/li&gt;&lt;/ul&gt; (0.0%)<br>  RANK_INFO: This fault is 2 execution step(s) away from the error location. (23.97%)<br>  RANK_INFO: Score calculated by edge type(s). (16.66%)</td></tr>
+<tr id="log-10"><th scope="row">2020-05-15</th><td>14:35:08:562</td><td>INFO</td><td>FaultLocalizationAlgorithm.run</td><td>Stopping fault localization...</td></tr>
+<tr id="log-11"><th scope="row">2020-05-15</th><td>14:35:08:563</td><td>INFO</td><td>CPAchecker.runAlgorithm</td><td>Stopping analysis ...</td></tr>
 </tbody></table>
       </div>
       <div class="fileContent content" ng-show="tabIsSet(5)" ng-class="{active: tabIsSet(5)}">
@@ -3505,52 +3564,52 @@ Generated on 2020-05-11 18:07:36 by CPAchecker 1.9.1-svn / predicateAnalysis    
 <tr id="statistics-64"><td>	  Total number of models for allsat</td><td>      983</td><td></td></tr>
 <tr id="statistics-66"><td>	  Max number of models for allsat</td><td>        10</td><td></td></tr>
 <tr id="statistics-68"><td>	  Avg number of models for allsat</td><td>        1.93</td><td></td></tr>
-<tr id="statistics-71"><td>Time for post operator</td><td>                                0.880s</td><td></td></tr>
-<tr id="statistics-73"><td>	  Time for path formula creation</td><td>                      0.857s</td><td></td></tr>
-<tr id="statistics-75"><td>Time for strengthen operator</td><td>                          0.064s</td><td></td></tr>
-<tr id="statistics-77"><td>Time for prec operator</td><td>                                3.997s</td><td></td></tr>
-<tr id="statistics-79"><td>	  Time for abstraction</td><td>                  3.893s </td><td>Max:     0.037s, Count: 604</td></tr>
-<tr id="statistics-81"><td>		    Boolean abstraction</td><td>                 1.728s</td><td></td></tr>
-<tr id="statistics-83"><td>		    Solving time</td><td>                        0.965s </td><td>Max:     0.016s</td></tr>
-<tr id="statistics-85"><td>		    Model enumeration time</td><td>              0.305s</td><td></td></tr>
-<tr id="statistics-87"><td>		    Time for BDD construction</td><td>           0.149s </td><td>Max:     0.011s</td></tr>
-<tr id="statistics-89"><td>Time for merge operator</td><td>                               0.080s</td><td></td></tr>
-<tr id="statistics-91"><td>Time for coverage checks</td><td>                              0.021s</td><td></td></tr>
-<tr id="statistics-93"><td>	  Time for BDD entailment checks</td><td>                      0.019s</td><td></td></tr>
-<tr id="statistics-95"><td>Total time for SMT solver (w/o itp)</td><td>     1.270s</td><td></td></tr>
+<tr id="statistics-71"><td>Time for post operator</td><td>                                0.891s</td><td></td></tr>
+<tr id="statistics-73"><td>	  Time for path formula creation</td><td>                      0.865s</td><td></td></tr>
+<tr id="statistics-75"><td>Time for strengthen operator</td><td>                          0.071s</td><td></td></tr>
+<tr id="statistics-77"><td>Time for prec operator</td><td>                                3.944s</td><td></td></tr>
+<tr id="statistics-79"><td>	  Time for abstraction</td><td>                  3.847s </td><td>Max:     0.033s, Count: 604</td></tr>
+<tr id="statistics-81"><td>		    Boolean abstraction</td><td>                 1.671s</td><td></td></tr>
+<tr id="statistics-83"><td>		    Solving time</td><td>                        0.932s </td><td>Max:     0.008s</td></tr>
+<tr id="statistics-85"><td>		    Model enumeration time</td><td>              0.284s</td><td></td></tr>
+<tr id="statistics-87"><td>		    Time for BDD construction</td><td>           0.132s </td><td>Max:     0.004s</td></tr>
+<tr id="statistics-89"><td>Time for merge operator</td><td>                               0.081s</td><td></td></tr>
+<tr id="statistics-91"><td>Time for coverage checks</td><td>                              0.028s</td><td></td></tr>
+<tr id="statistics-93"><td>	  Time for BDD entailment checks</td><td>                      0.025s</td><td></td></tr>
+<tr id="statistics-95"><td>Total time for SMT solver (w/o itp)</td><td>     1.216s</td><td></td></tr>
 <tr id="statistics-98"><td>Number of path formula cache hits</td><td>   1415 </td><td>42%</td></tr>
 <tr id="statistics-101"><td>Inside post operator</td><td>                  </td><td></td></tr>
 <tr id="statistics-103"><td>	  Inside path formula creation</td><td>        </td><td></td></tr>
-<tr id="statistics-105"><td>		    Time for path formula computation</td><td>     0.820s</td><td></td></tr>
+<tr id="statistics-105"><td>		    Time for path formula computation</td><td>     0.825s</td><td></td></tr>
 <tr id="statistics-108"><td>Total number of created targets for pointer analysis</td><td> 0</td><td></td></tr>
 <tr id="statistics-112"><td>Number of BDD nodes</td><td>                               3782</td><td></td></tr>
 <tr id="statistics-114"><td>Size of BDD node table</td><td>                            62921</td><td></td></tr>
 <tr id="statistics-116"><td>Size of BDD cache</td><td>                                 6299</td><td></td></tr>
-<tr id="statistics-118"><td>Size of BDD node cleanup queue</td><td>                    0.55 </td><td>sum: 5248, count: 9498, min: 0, max: 2608</td></tr>
-<tr id="statistics-120"><td>Time for BDD node cleanup</td><td>                             0.011s</td><td></td></tr>
+<tr id="statistics-118"><td>Size of BDD node cleanup queue</td><td>                    0.61 </td><td>sum: 5796, count: 9498, min: 0, max: 2276</td></tr>
+<tr id="statistics-120"><td>Time for BDD node cleanup</td><td>                             0.013s</td><td></td></tr>
 <tr id="statistics-122"><td>Time for BDD garbage collection</td><td>                       0.000s </td><td>in 0 runs</td></tr>
 <tr class="table_head" id="statistics-125"><th>KeyValue statistics</th><th></th><th></th></tr><tr id="statistics-127"><td>Init. function predicates</td><td>                         0</td><td></td></tr>
 <tr id="statistics-129"><td>Init. global predicates</td><td>                           0</td><td></td></tr>
 <tr id="statistics-131"><td>Init. location predicates</td><td>                         0</td><td></td></tr>
 <tr class="table_head" id="statistics-134"><th>Invariant Generation statistics</th><th></th><th></th></tr><tr class="table_head" id="statistics-137"><th>AutomatonAnalysis (AssertionAutomaton) statistics</th><th></th><th></th></tr><tr id="statistics-139"><td>Number of states</td><td>                                  1</td><td></td></tr>
-<tr id="statistics-141"><td>Total time for successor computation</td><td>                  0.074s</td><td></td></tr>
+<tr id="statistics-141"><td>Total time for successor computation</td><td>                  0.070s</td><td></td></tr>
 <tr id="statistics-143"><td>Automaton transfers with branching</td><td>                0</td><td></td></tr>
 <tr id="statistics-145"><td>Automaton transfer successors</td><td>                     1.00 </td><td>sum: 3016, count: 3016, min: 1, max: 1 [1 x 3016]</td></tr>
 <tr id="statistics-147"><td>Number of states with assumption transitions</td><td>      0</td><td></td></tr>
 <tr class="table_head" id="statistics-150"><th>AutomatonAnalysis (ErrorLabelAutomaton) statistics</th><th></th><th></th></tr><tr id="statistics-152"><td>Number of states</td><td>                                  1</td><td></td></tr>
-<tr id="statistics-154"><td>Total time for successor computation</td><td>                  0.046s</td><td></td></tr>
+<tr id="statistics-154"><td>Total time for successor computation</td><td>                  0.025s</td><td></td></tr>
 <tr id="statistics-156"><td>Automaton transfers with branching</td><td>                0</td><td></td></tr>
 <tr id="statistics-158"><td>Automaton transfer successors</td><td>                     1.00 </td><td>sum: 3016, count: 3016, min: 1, max: 1 [1 x 3016]</td></tr>
 <tr id="statistics-160"><td>Number of states with assumption transitions</td><td>      0</td><td></td></tr>
 <tr class="table_head" id="statistics-163"><th>AutomatonAnalysis (TerminatingFunctions) statistics</th><th></th><th></th></tr><tr id="statistics-165"><td>Number of states</td><td>                                  1</td><td></td></tr>
-<tr id="statistics-167"><td>Total time for successor computation</td><td>                  0.013s</td><td></td></tr>
+<tr id="statistics-167"><td>Total time for successor computation</td><td>                  0.010s</td><td></td></tr>
 <tr id="statistics-169"><td>Automaton transfers with branching</td><td>                0</td><td></td></tr>
 <tr id="statistics-171"><td>Automaton transfer successors</td><td>                     1.00 </td><td>sum: 3016, count: 3016, min: 1, max: 1 [1 x 3016]</td></tr>
 <tr id="statistics-173"><td>Number of states with assumption transitions</td><td>      0</td><td></td></tr>
-<tr class="table_head" id="statistics-176"><th>Fault Localization statistics</th><th></th><th></th></tr><tr id="statistics-178"><td>Total time</td><td>                                           58.019s</td><td></td></tr>
-<tr class="table_head" id="statistics-181"><th>Error invariants algorithm statistics</th><th></th><th></th></tr><tr id="statistics-183"><td>Total time</td><td>                                           50.193s</td><td></td></tr>
+<tr class="table_head" id="statistics-176"><th>Fault Localization statistics</th><th></th><th></th></tr><tr id="statistics-178"><td>Total time</td><td>                                           58.203s</td><td></td></tr>
+<tr class="table_head" id="statistics-181"><th>Error invariants algorithm statistics</th><th></th><th></th></tr><tr id="statistics-183"><td>Total time</td><td>                                           50.445s</td><td></td></tr>
 <tr id="statistics-185"><td>Search calls</td><td>                                          1421</td><td></td></tr>
-<tr id="statistics-187"><td>Solver calls</td><td>                                          1203</td><td></td></tr>
+<tr id="statistics-187"><td>Solver calls</td><td>                                           361</td><td></td></tr>
 <tr class="table_head" id="statistics-190"><th>Code Coverage</th><th></th><th></th></tr><tr id="statistics-192"><td>	  Function coverage</td><td>      1.000</td><td></td></tr>
 <tr id="statistics-194"><td>	  Visited lines</td><td>          18</td><td></td></tr>
 <tr id="statistics-196"><td>	  Total lines</td><td>            19</td><td></td></tr>
@@ -3570,43 +3629,43 @@ Generated on 2020-05-11 18:07:36 by CPAchecker 1.9.1-svn / predicateAnalysis    
 <tr id="statistics-227"><td>	  Number of reached functions</td><td>   1 </td><td>100%</td></tr>
 <tr id="statistics-229"><td>	  Number of partitions</td><td>          425</td><td></td></tr>
 <tr id="statistics-231"><td>		    Avg size of partitions</td><td>      1</td><td></td></tr>
-<tr id="statistics-233"><td>		    Max size of partitions</td><td>      43 </td><td>with key [N17 before line 21, Function main called from node N1, stack depth 1 [3f2049b6], stack [main]]</td></tr>
+<tr id="statistics-233"><td>		    Max size of partitions</td><td>      43 </td><td>with key [N17 before line 21, Function main called from node N1, stack depth 1 [6f6a7463], stack [main]]</td></tr>
 <tr id="statistics-235"><td>	  Number of target states</td><td>       1</td><td></td></tr>
 <tr id="statistics-237"><td>	  Size of final wait list</td><td>       16</td><td></td></tr>
-<tr id="statistics-240"><td>Time for analysis setup</td><td>          3.482s</td><td></td></tr>
+<tr id="statistics-240"><td>Time for analysis setup</td><td>          3.476s</td><td></td></tr>
 <tr id="statistics-242"><td>	  Time for loading CPAs</td><td>          1.068s</td><td></td></tr>
-<tr id="statistics-244"><td>	  Time for loading parser</td><td>        0.620s</td><td></td></tr>
-<tr id="statistics-246"><td>	  Time for CFA construction</td><td>      1.471s</td><td></td></tr>
-<tr id="statistics-248"><td>		    Time for parsing file(s)</td><td>     0.858s</td><td></td></tr>
-<tr id="statistics-250"><td>		    Time for AST to CFA</td><td>          0.191s</td><td></td></tr>
-<tr id="statistics-252"><td>		    Time for CFA sanity check</td><td>    0.019s</td><td></td></tr>
-<tr id="statistics-254"><td>		    Time for post-processing</td><td>     0.182s</td><td></td></tr>
-<tr id="statistics-256"><td>		    Time for CFA export</td><td>          1.135s</td><td></td></tr>
-<tr id="statistics-258"><td>			      Time for function pointers resolving</td><td>            0.006s</td><td></td></tr>
+<tr id="statistics-244"><td>	  Time for loading parser</td><td>        0.556s</td><td></td></tr>
+<tr id="statistics-246"><td>	  Time for CFA construction</td><td>      1.600s</td><td></td></tr>
+<tr id="statistics-248"><td>		    Time for parsing file(s)</td><td>     0.980s</td><td></td></tr>
+<tr id="statistics-250"><td>		    Time for AST to CFA</td><td>          0.206s</td><td></td></tr>
+<tr id="statistics-252"><td>		    Time for CFA sanity check</td><td>    0.021s</td><td></td></tr>
+<tr id="statistics-254"><td>		    Time for post-processing</td><td>     0.197s</td><td></td></tr>
+<tr id="statistics-256"><td>		    Time for CFA export</td><td>          1.031s</td><td></td></tr>
+<tr id="statistics-258"><td>			      Time for function pointers resolving</td><td>            0.008s</td><td></td></tr>
 <tr id="statistics-260"><td>				        Function calls via function pointers</td><td>             0 </td><td>count: 1, min: 0, max: 0, avg: 0.00</td></tr>
 <tr id="statistics-262"><td>				        Instrumented function pointer calls</td><td>              0 </td><td>count: 1, min: 0, max: 0, avg: 0.00</td></tr>
 <tr id="statistics-264"><td>				        Function calls with function pointer arguments</td><td>        0 </td><td>count: 1, min: 0, max: 0, avg: 0.00</td></tr>
 <tr id="statistics-266"><td>				        Instrumented function pointer arguments</td><td>          0 </td><td>count: 1, min: 0, max: 0, avg: 0.00</td></tr>
-<tr id="statistics-268"><td>			      Time for classifying variables</td><td>                  0.105s</td><td></td></tr>
+<tr id="statistics-268"><td>			      Time for classifying variables</td><td>                  0.110s</td><td></td></tr>
 <tr id="statistics-270"><td>				        Time for collecting variables</td><td>                 0.046s</td><td></td></tr>
 <tr id="statistics-272"><td>				        Time for solving dependencies</td><td>                 0.001s</td><td></td></tr>
 <tr id="statistics-274"><td>				        Time for building hierarchy</td><td>                   0.000s</td><td></td></tr>
-<tr id="statistics-276"><td>				        Time for building classification</td><td>              0.055s</td><td></td></tr>
+<tr id="statistics-276"><td>				        Time for building classification</td><td>              0.060s</td><td></td></tr>
 <tr id="statistics-278"><td>				        Time for exporting data</td><td>                       0.003s</td><td></td></tr>
-<tr id="statistics-280"><td>Time for Analysis</td><td>               58.019s</td><td></td></tr>
-<tr id="statistics-282"><td>CPU time for analysis</td><td>           70.690s</td><td></td></tr>
+<tr id="statistics-280"><td>Time for Analysis</td><td>               58.204s</td><td></td></tr>
+<tr id="statistics-282"><td>CPU time for analysis</td><td>           68.470s</td><td></td></tr>
 <tr id="statistics-284"><td>Time for analyzing result</td><td>        0.002s</td><td></td></tr>
-<tr id="statistics-286"><td>Total time for CPAchecker</td><td>       61.504s</td><td></td></tr>
-<tr id="statistics-288"><td>Total CPU time for CPAchecker</td><td>   80.070s</td><td></td></tr>
-<tr id="statistics-290"><td>Time for statistics</td><td>              0.167s</td><td></td></tr>
-<tr id="statistics-293"><td>Time for Garbage Collector</td><td>       0.103s </td><td>in 8 runs</td></tr>
+<tr id="statistics-286"><td>Total time for CPAchecker</td><td>       61.685s</td><td></td></tr>
+<tr id="statistics-288"><td>Total CPU time for CPAchecker</td><td>   77.180s</td><td></td></tr>
+<tr id="statistics-290"><td>Time for statistics</td><td>              0.134s</td><td></td></tr>
+<tr id="statistics-293"><td>Time for Garbage Collector</td><td>       0.136s </td><td>in 9 runs</td></tr>
 <tr id="statistics-295"><td>Garbage Collector(s) used</td><td>    G1 Old Generation, G1 Young Generation</td><td></td></tr>
-<tr id="statistics-297"><td>Used heap memory</td><td>                 91MB (    87 MiB) max;     61MB (    59 MiB) avg;     98MB (    94 MiB) peak</td><td></td></tr>
+<tr id="statistics-297"><td>Used heap memory</td><td>                 89MB (    85 MiB) max;     62MB (    59 MiB) avg;     93MB (    89 MiB) peak</td><td></td></tr>
 <tr id="statistics-299"><td>Used non-heap memory</td><td>             57MB (    54 MiB) max;     54MB (    52 MiB) avg;     58MB (    55 MiB) peak</td><td></td></tr>
-<tr id="statistics-301"><td>Used in G1 Old Gen pool</td><td>          20MB (    19 MiB) max;     19MB (    18 MiB) avg;     20MB (    19 MiB) peak</td><td></td></tr>
+<tr id="statistics-301"><td>Used in G1 Old Gen pool</td><td>          24MB (    23 MiB) max;     22MB (    21 MiB) avg;     24MB (    23 MiB) peak</td><td></td></tr>
 <tr id="statistics-303"><td>Allocated heap memory</td><td>           127MB (   122 MiB) max;    127MB (   122 MiB) avg</td><td></td></tr>
-<tr id="statistics-305"><td>Allocated non-heap memory</td><td>        60MB (    57 MiB) max;     57MB (    55 MiB) avg</td><td></td></tr>
-<tr id="statistics-307"><td>Total process virtual memory</td><td>   4817MB (  4594 MiB) max;   4802MB (  4580 MiB) avg</td><td></td></tr>
+<tr id="statistics-305"><td>Allocated non-heap memory</td><td>        60MB (    57 MiB) max;     58MB (    55 MiB) avg</td><td></td></tr>
+<tr id="statistics-307"><td>Total process virtual memory</td><td>   4815MB (  4592 MiB) max;   4802MB (  4580 MiB) avg</td><td></td></tr>
 </tbody></table>
       </div>
       <div class="fileContent content" ng-show="tabIsSet(6)" ng-class="{active: tabIsSet(6)}">
